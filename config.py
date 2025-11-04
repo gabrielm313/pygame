@@ -1,8 +1,8 @@
 from os import path
 
 #RESOLUÇÃO DA TELA
-LARGURA = 900
-ALTURA = 500
+LARGURA = 1920
+ALTURA = 1080
 
 # Estabelece a pasta que contem as figuras e sons.
 IMG_DIR = path.join(path.dirname(__file__), 'assets', 'img')

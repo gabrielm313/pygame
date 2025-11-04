@@ -2,13 +2,34 @@ import pygame
 import os
 from config import IMG_DIR
 
-PLAYER_IMG = 'player_img'
+ASTRONAUTA_IMG = 'astronauta'
 
 def load_assets():
     assets = {}
+
     #para adicionar a imagem do player foi utilizado chatgpt
-    player_path = os.path.join(IMG_DIR, 'player.png') 
-    assets[PLAYER_IMG] = pygame.image.load(player_path).convert_alpha()
+    ast_path = os.path.join(IMG_DIR, 'astronauta.png') 
+    astronauta1= pygame.image.load(ast_path).convert_alpha()
+    
+    # --- ajuste conforme seu sheet: 5 colunas x 5 linhas ---
+    COLS = 5
+    ROWS = 5
+    sheet_w, sheet_h = astronauta1.get_width(), astronauta1.get_height()
+    FRAME_W = sheet_w // COLS
+    FRAME_H = sheet_h // ROWS
+
+    frames = []
+    for r in range(ROWS):
+        for c in range(COLS):
+            rect = pygame.Rect(c * FRAME_W, r * FRAME_H, FRAME_W, FRAME_H)
+            image = astronauta1.subsurface(rect).copy()
+
+            cor_transp = image.get_at((0, 0))
+            image.set_colorkey(cor_transp)
+            frames.append(image)
+
+    assets[ASTRONAUTA_IMG] = frames
+    # 💡 Torna o fundo transparente
 
     return assets
 
