@@ -12,7 +12,7 @@ class Astronauta(pygame.sprite.Sprite):
         self.assets = assets
 
         # frames carregados no assets (lista)
-        self.frames = assets['astronauta']
+        self.frames = assets['astronauta1']
 
         self.anim = {
             'idle': [0],
@@ -25,13 +25,13 @@ class Astronauta(pygame.sprite.Sprite):
         self.state = 'idle'
         self.frame_index = 0
         self.frame_timer = 0.0
-        self.frame_delay = 80  # ms entre frames, ajuste para velocidade de animação
+        self.frame_delay = 60  # ms entre frames, ajuste para velocidade de animação
 
         self.image_original = self.frames[self.anim['idle'][0]]
         self.image = self.image_original.copy()
         self.rect = self.image.get_rect()
         self.rect.centerx = LARGURA // 2
-        self.rect.bottom = ALTURA - 10
+        self.rect.bottom = ALTURA - 10 
 
         self.speedx = 0
         self.speedy = 0

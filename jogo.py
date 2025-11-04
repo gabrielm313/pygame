@@ -7,8 +7,10 @@ from sprites import Astronauta
 pygame.init()
 clock = pygame.time.Clock()
 
-#gera a tela principal
-window = pygame.display.set_mode((LARGURA, ALTURA))
+#gera a tela principal com tela cheia
+info = pygame.display.Info()
+LARGURA, ALTURA = info.current_w, info.current_h
+window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 pygame.display.set_caption('Joguinho')
 
 assets = load_assets()
@@ -20,7 +22,7 @@ all_sprites.add(astronauta)
 
 game = True
 while game:
-    dt = clock.tick(60)  # limita a 60 FPS
+    dt = clock.tick(30)  # limita a 60 FPS
 
     for event in pygame.event.get():
         # ----- Verifica consequências
@@ -30,11 +32,19 @@ while game:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 game = False
+                
+            #colocar o jogo em tela cheia
+            if event.key == pygame.K_F11:
+                fullscreen = not pygame.display.get_surface().get_flags() & pygame.FULLSCREEN
+                if fullscreen:
+                    window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+                else:
+                    window = pygame.display.set_mode((LARGURA, ALTURA))
             # Dependendo da tecla, altera a velocidade.
             if event.key == pygame.K_LEFT:
-                astronauta.speedx = -5
+                astronauta.speedx = -10
             if event.key == pygame.K_RIGHT:
-                astronauta.speedx = 5
+                astronauta.speedx = 10
             if event.key == pygame.K_SPACE:
                 astronauta.pular()
             if event.key == pygame.K_DOWN:

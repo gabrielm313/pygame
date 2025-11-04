@@ -2,13 +2,13 @@ import pygame
 import os
 from config import IMG_DIR
 
-ASTRONAUTA_IMG = 'astronauta'
+ASTRONAUTA_IMG = 'astronauta1'
 
 def load_assets():
     assets = {}
 
     #para adicionar a imagem do player foi utilizado chatgpt
-    ast_path = os.path.join(IMG_DIR, 'astronauta.png') 
+    ast_path = os.path.join(IMG_DIR, 'astronauta1.png') 
     astronauta1= pygame.image.load(ast_path).convert_alpha()
     
     # --- ajuste conforme seu sheet: 5 colunas x 5 linhas ---
