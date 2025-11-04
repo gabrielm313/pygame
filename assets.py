@@ -1,10 +1,15 @@
 import pygame
-from config import PLAYER_ALTU, PLAYER_LARG
+import os
+from config import IMG_DIR
 
-PLAYER = 'player_img'
+PLAYER_IMG = 'player_img'
 
 def load_assets():
     assets = {}
-    assets[PLAYER] = pygame.image.load.join
+    #para adicionar a imagem do player foi utilizado chatgpt
+    player_path = os.path.join(IMG_DIR, 'player.png') 
+    assets[PLAYER_IMG] = pygame.image.load(player_path).convert_alpha()
+
+    return assets
 
     

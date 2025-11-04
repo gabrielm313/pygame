@@ -1,17 +1,17 @@
 import pygame
-from config import LARGURA , ALTURA , PLAYER_LARG , PLAYER_ALTU
-from assets import PLAYER_IMG , IMG_DIR
+from config import LARGURA , ALTURA 
+from assets import PLAYER_IMG 
 
-class Alien(pygame.sprite.Sprite):
+class Jogador(pygame.sprite.Sprite):
     def __init__(self , groups , assets):
         # Construtor da classe mãe (Sprite).
         pygame.sprite.Sprite.__init__(self)
 
         self.image = assets[PLAYER_IMG]
-        self.react = self.image.get_react()
-        self.rect.centerx = LARGURA / 2
+        self.rect = self.image.get_rect()
+        self.rect.centerx = LARGURA // 2
         self.rect.bottom = ALTURA - 10
-        self.speedx = 5
+        self.speedx = 0
         self.groups = groups
         self.assets = assets
 

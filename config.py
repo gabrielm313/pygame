@@ -1,6 +1,11 @@
+from os import path
+
 #RESOLUÇÃO DA TELA
 LARGURA = 900
 ALTURA = 500
+
+# Estabelece a pasta que contem as figuras e sons.
+IMG_DIR = path.join(path.dirname(__file__), 'assets', 'img')
 
 #ESTADOS POSSÍVEIS SPRITE JOGADOR
 ANDANDO = 0
@@ -13,6 +18,10 @@ CIMADIR = 6
 BAIXOESQ = 7
 BAIXODIR = 8
 MORRENDO = 9
+
+#TAMANHOS
+PLAYER_LARG = 50
+PLAYER_ALTU = 70
 
 #ESTADOS DO JOGO
 INIT = 0
