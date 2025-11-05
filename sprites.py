@@ -91,8 +91,8 @@ class Astronauta(pygame.sprite.Sprite):
             self.rect.left = 0
 
         # Limite inferior (chão)
-        if self.rect.bottom >= ALTURA - 10:  # 10 é a margem do chão
-            self.rect.bottom = ALTURA - 10
+        if self.rect.bottom >= ALTURA - 1:  # 10 é a margem do chão
+            self.rect.bottom = ALTURA - 1
             self.speedy = 0
             self.no_chao = True
 
@@ -104,7 +104,7 @@ class Astronauta(pygame.sprite.Sprite):
     #adicionando funções para os movimentos do personagem
     def pular(self):
         if self.no_chao:  # só pula se estiver no chão
-            self.speedy = -10
+            self.speedy = -70
             self.no_chao = False
 
     #aqui(agachar) ainda está dando erro
