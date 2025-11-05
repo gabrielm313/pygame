@@ -15,8 +15,8 @@ def load_assets():
     COLS = 5
     ROWS = 5
     sheet_w, sheet_h = astronauta1.get_width(), astronauta1.get_height()
-    FRAME_W = sheet_w // COLS
-    FRAME_H = sheet_h // ROWS
+    FRAME_W = sheet_w / COLS
+    FRAME_H = sheet_h / ROWS
 
     frames = []
     for r in range(ROWS):
@@ -24,8 +24,6 @@ def load_assets():
             rect = pygame.Rect(c * FRAME_W, r * FRAME_H, FRAME_W, FRAME_H)
             image = astronauta1.subsurface(rect).copy()
 
-            cor_transp = image.get_at((0, 0))
-            image.set_colorkey(cor_transp)
             frames.append(image)
 
     assets[ASTRONAUTA_IMG] = frames
