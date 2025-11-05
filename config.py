@@ -2,7 +2,7 @@ from os import path
 
 #RESOLUÇÃO DA TELA
 LARGURA = 1920
-ALTURA = 900
+ALTURA = 1080
 
 # Estabelece a pasta que contem as figuras e sons.
 IMG_DIR = path.join(path.dirname(__file__), 'assets', 'img')
@@ -20,8 +20,8 @@ BAIXODIR = 8
 MORRENDO = 9
 
 #TAMANHOS
-PLAYER_LARG = 50
-PLAYER_ALTU = 70
+PLAYER_LARG = 300
+PLAYER_ALTU = 300
 
 #ESTADOS DO JOGO
 INIT = 0
@@ -34,4 +34,4 @@ QUIT = 4
 FPS = 60
 
 #GRAVIDADE
-GRAVIDADE = 0.5
+GRAVIDADE = 5

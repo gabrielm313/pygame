@@ -1,6 +1,6 @@
 import pygame
 import os
-from config import IMG_DIR
+from config import IMG_DIR , PLAYER_LARG , PLAYER_ALTU 
 
 ASTRONAUTA_IMG = 'astronauta1'
 FUNDO_IMG = 'fundo_pg'
@@ -22,11 +22,17 @@ def load_assets():
     FRAME_W = sheet_w / COLS
     FRAME_H = sheet_h / ROWS
 
+    #Fator da escala do personagem
+    # ESCALA = 1.5
+
     frames = []
     for r in range(ROWS):
         for c in range(COLS):
             rect = pygame.Rect(c * FRAME_W, r * FRAME_H, FRAME_W, FRAME_H)
             image = astronauta1.subsurface(rect).copy()
+
+            # novo_tam = (int(FRAME_W * ESCALA) , int(FRAME_H * ESCALA))
+            image = pygame.transform.scale(image, (PLAYER_LARG , PLAYER_ALTU))
 
             frames.append(image)
 

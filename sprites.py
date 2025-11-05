@@ -1,8 +1,7 @@
 import pygame
-from config import LARGURA , ALTURA 
+from config import LARGURA , ALTURA , GRAVIDADE 
 from assets import ASTRONAUTA_IMG 
 
-GRAVIDADE = 0.5
 
 class Astronauta(pygame.sprite.Sprite):
     def __init__(self , groups , assets):
@@ -25,13 +24,13 @@ class Astronauta(pygame.sprite.Sprite):
         self.state = 'parado'
         self.frame_index = 0
         self.frame_timer = 0.0
-        self.frame_delay = 60  # ms entre frames, ajuste para velocidade de animação
+        self.frame_delay = 45  # ms entre frames, ajuste para velocidade de animação
 
         self.image_original = self.frames[self.anim['parado'][0]]
         self.image = self.image_original.copy()
         self.rect = self.image.get_rect()
         self.rect.centerx = LARGURA // 2
-        self.rect.bottom = ALTURA - 10 
+        self.rect.bottom = ALTURA - 40
 
         self.speedx = 0
         self.speedy = 0
@@ -55,7 +54,7 @@ class Astronauta(pygame.sprite.Sprite):
 
         # Aplica gravidade
         if not self.no_chao:
-            self.speedy += 5
+            self.speedy += GRAVIDADE
 
         # escolhe animação com base no estado / velocidade
         if self.agachado:
@@ -91,8 +90,8 @@ class Astronauta(pygame.sprite.Sprite):
             self.rect.left = 0
 
         # Limite inferior (chão)
-        if self.rect.bottom >= ALTURA - 1:  # 10 é a margem do chão
-            self.rect.bottom = ALTURA - 1
+        if self.rect.bottom >= ALTURA - 40:  # 10 é a margem do chão
+            self.rect.bottom = ALTURA - 40
             self.speedy = 0
             self.no_chao = True
 
@@ -104,7 +103,7 @@ class Astronauta(pygame.sprite.Sprite):
     #adicionando funções para os movimentos do personagem
     def pular(self):
         if self.no_chao:  # só pula se estiver no chão
-            self.speedy = -70
+            self.speedy = -82
             self.no_chao = False
 
     #aqui(agachar) ainda está dando erro
