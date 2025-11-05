@@ -3,6 +3,7 @@ import os
 from config import IMG_DIR
 
 ASTRONAUTA_IMG = 'astronauta1'
+FUNDO_IMG = 'fundo_pygame'
 
 def load_assets():
     assets = {}
@@ -11,6 +12,9 @@ def load_assets():
     ast_path = os.path.join(IMG_DIR, 'astronauta1.png') 
     astronauta1= pygame.image.load(ast_path).convert_alpha()
     
+    fundo_path = os.path.join(IMG_DIR, 'fundo_pygame.png') 
+    fundo_pygame= pygame.image.load(fundo_path)
+    assets[FUNDO_IMG] = fundo_pygame
     # --- ajuste conforme seu sheet: 5 colunas x 5 linhas ---
     COLS = 5
     ROWS = 5
@@ -27,7 +31,6 @@ def load_assets():
             frames.append(image)
 
     assets[ASTRONAUTA_IMG] = frames
-    # 💡 Torna o fundo transparente
 
     return assets
 
