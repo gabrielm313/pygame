@@ -15,19 +15,19 @@ class Astronauta(pygame.sprite.Sprite):
         self.frames = assets['astronauta1']
 
         self.anim = {
-            'idle': [0],
-            'walk': list(range(0, 5)),      # frames 0..4
-            'walk_left': list(range(5,10)), # frames 5..9 (apenas se seu sheet tiver)
-            'crouch': [10],                 # exemplo
+            'parado': [0],
+            'andando_d': list(range(0, 5)),      # frames 0..4
+            'andando_e': list(range(5,10)), # frames 5..9 (apenas se seu sheet tiver)
+            'agachando': [10],                 # exemplo
         }
 
         # Padrões
-        self.state = 'idle'
+        self.state = 'parado'
         self.frame_index = 0
         self.frame_timer = 0.0
         self.frame_delay = 60  # ms entre frames, ajuste para velocidade de animação
 
-        self.image_original = self.frames[self.anim['idle'][0]]
+        self.image_original = self.frames[self.anim['parado'][0]]
         self.image = self.image_original.copy()
         self.rect = self.image.get_rect()
         self.rect.centerx = LARGURA // 2
@@ -55,15 +55,15 @@ class Astronauta(pygame.sprite.Sprite):
 
         # Aplica gravidade
         if not self.no_chao:
-            self.speedy += 1
+            self.speedy += 5
 
         # escolhe animação com base no estado / velocidade
         if self.agachado:
-            anim_key = 'crouch'
+            anim_key = 'agachando'
         elif self.speedx != 0:
-            anim_key = 'walk'
+            anim_key = 'andando_d'
         else:
-            anim_key = 'idle'
+            anim_key = 'parado'
         
         # se mudou de animação, reinicia frame
         if anim_key != self.state:
@@ -104,7 +104,7 @@ class Astronauta(pygame.sprite.Sprite):
     #adicionando funções para os movimentos do personagem
     def pular(self):
         if self.no_chao:  # só pula se estiver no chão
-            self.speedy = -20
+            self.speedy = -10
             self.no_chao = False
 
     #aqui(agachar) ainda está dando erro
@@ -114,10 +114,10 @@ class Astronauta(pygame.sprite.Sprite):
             return
         # exemplo simples: trocar a flag e animação
         self.agachado = True
-        self.set_state('crouch')
+        self.set_state('agachando')
 
     def levantar(self):
         if not self.agachado:
             return
         self.agachado = False
-        self.set_state('idle')
+        self.set_state('parado')
