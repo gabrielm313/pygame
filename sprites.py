@@ -104,7 +104,7 @@ class Astronauta(pygame.sprite.Sprite):
     #adicionando funções para os movimentos do personagem
     def pular(self):
         if self.no_chao:  # só pula se estiver no chão
-            self.speedy = -10
+            self.speedy = -20
             self.no_chao = False
 
     #aqui(agachar) ainda está dando erro
