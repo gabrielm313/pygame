@@ -14,33 +14,6 @@ W, H = window.get_width(), window.get_height()
 clock = pygame.time.Clock()
 FPS = 60
 
-# ----- EFEITOS DA ARMA (4 FRAMES) -----
-# Coloque suas 4 imagens em assets/img/flash1.png ... flash4.png (ou ajuste nomes)
-FLASH_FRAMES_PATHS = [
-    os.path.join('assets', 'img', 'efeito1.png'),
-    os.path.join('assets', 'img', 'efeito2.png'),
-    os.path.join('assets', 'img', 'efeito3.png'),
-    os.path.join('assets', 'img', 'efeito4.png'),
-]
-FLASH_DURATION_MS = 140
-# Carrega as 4 imagens como superfícies com alpha
-FLASH_FRAMES = []
-for p in FLASH_FRAMES_PATHS:
-    try:
-        img = pygame.image.load(p).convert_alpha()
-        FLASH_FRAMES.append(img)
-    except Exception as e:
-        print("Erro ao carregar", p, e)
-
-NUM_FLASH_FRAMES = len(FLASH_FRAMES)
-if NUM_FLASH_FRAMES == 0:
-    # fallback visual simples caso não encontre imagens
-    NUM_FLASH_FRAMES = 1
-    FLASH_FRAMES = [None]
-
-# duração total do flash (ms) já definida: FLASH_DURATION_MS
-# cálculo da duração de cada frame (ms)
-FRAME_DURATION_MS = max(1, int(FLASH_DURATION_MS / NUM_FLASH_FRAMES))
 # ----- Configuráveis -----
 # Coordenadas da ponta do cano: ajuste conforme o seu fundo (x, y)
 GUN_TIP_POS_P1 = (420, 700)   # jogador da esquerda
