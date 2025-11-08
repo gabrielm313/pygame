@@ -11,23 +11,25 @@ class Astronauta(pygame.sprite.Sprite):
         self.assets = assets
 
         # frames carregados no assets (lista)
-        self.frames = assets['astronauta1']
+        # self.frames = assets['astronauta1']
 
-        self.anim = {
-            'parado': [0],
-            'andando_d': list(range(0, 5)),      # frames 0..4
-            'andando_e': list(range(5,10)), # frames 5..9 (apenas se seu sheet tiver)
-            'agachando': [10],                 # exemplo
-        }
+        # self.anim = {
+        #     'parado': [0],
+        #     'andando_d': list(range(0, 5)),      # frames 0..4
+        #     'andando_e': list(range(5,10)), # frames 5..9 (apenas se seu sheet tiver)
+        #     'agachando': [10],                 # exemplo
+        # }
 
-        # Padrões
-        self.state = 'parado'
-        self.frame_index = 0
-        self.frame_timer = 0.0
-        self.frame_delay = 45  # ms entre frames, ajuste para velocidade de animação
+        # # Padrões
+        # self.state = 'parado'
+        # self.frame_index = 0
+        # self.frame_timer = 0.0
+        # self.frame_delay = 45  # ms entre frames, ajuste para velocidade de animação
 
-        self.image_original = self.frames[self.anim['parado'][0]]
-        self.image = self.image_original.copy()
+        # self.image_original = self.frames[self.anim['parado'][0]]
+        # self.image = self.image_original.copy()
+        self.image = assets[ASTRONAUTA_IMG]
+        self.mask = pygame.mask.from_surface(self.image)
         self.rect = self.image.get_rect()
         self.rect.centerx = LARGURA // 2
         self.rect.bottom = ALTURA - 40
@@ -35,13 +37,13 @@ class Astronauta(pygame.sprite.Sprite):
         self.speedx = 0
         self.speedy = 0
         self.no_chao = True  # controla se está no chão
-        self.agachado = False
+        # self.agachado = False
 
-    def set_state(self, new_state):
-        if self.state != new_state:
-            self.state = new_state
-            self.frame_index = 0
-            self.frame_timer = 0
+    # def set_state(self, new_state):
+    #     if self.state != new_state:
+    #         self.state = new_state
+    #         self.frame_index = 0
+    #         self.frame_timer = 0
 
     def update(self , dt=0):
         # dt = tempo em ms do clock.tick() ou calculado em loop principal
@@ -57,26 +59,26 @@ class Astronauta(pygame.sprite.Sprite):
             self.speedy += GRAVIDADE
 
         # escolhe animação com base no estado / velocidade
-        if self.agachado:
-            anim_key = 'agachando'
-        elif self.speedx != 0:
-            anim_key = 'andando_d'
-        else:
-            anim_key = 'parado'
+        # if self.agachado:
+        #     anim_key = 'agachando'
+        # elif self.speedx != 0:
+        #     anim_key = 'andando_d'
+        # else:
+        #     anim_key = 'parado'
         
-        # se mudou de animação, reinicia frame
-        if anim_key != self.state:
-            self.set_state(anim_key)
+        # # se mudou de animação, reinicia frame
+        # if anim_key != self.state:
+        #     self.set_state(anim_key)
 
-        # avança frames de animação
-        self.frame_timer += dt
-        frames_idx_list = self.anim.get(anim_key, [0])
-        if self.frame_timer >= self.frame_delay:
-            self.frame_timer = 0
-            self.frame_index = (self.frame_index + 1) % len(frames_idx_list)
+        # # avança frames de animação
+        # self.frame_timer += dt
+        # frames_idx_list = self.anim.get(anim_key, [0])
+        # if self.frame_timer >= self.frame_delay:
+        #     self.frame_timer = 0
+        #     self.frame_index = (self.frame_index + 1) % len(frames_idx_list)
 
-        current_frame_number = frames_idx_list[self.frame_index]
-        self.image = self.frames[current_frame_number]
+        # current_frame_number = frames_idx_list[self.frame_index]
+        # self.image = self.frames[current_frame_number]
         # se precisar ajustar rect (manter bottom/midpoint)
         # exemplo para manter midbottom:
         midbottom = self.rect.midbottom
@@ -90,7 +92,7 @@ class Astronauta(pygame.sprite.Sprite):
             self.rect.left = 0
 
         # Limite inferior (chão)
-        if self.rect.bottom >= ALTURA - 40:  # 10 é a margem do chão
+        if self.rect.bottom >= ALTURA - 40:  # 40 é a margem do chão
             self.rect.bottom = ALTURA - 40
             self.speedy = 0
             self.no_chao = True

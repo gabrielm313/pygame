@@ -19,18 +19,22 @@ pygame.display.set_caption('Joguinho')
 
 assets = load_assets()
 
+# depois escale orig_bg para bg_image como mostrei acima
+
+
 bg_path = os.path.join('assets', 'img', 'fundo_pg.png')
+orig_bg = pygame.image.load(bg_path).convert_alpha()
 
-# Carrega a imagem do background (não sobrescrever window)
-bg_image = pygame.image.load(bg_path).convert()  # use convert_alpha() se houver transparência
-bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
-
-modificador = ALTURA / bg_height
-# Se quiser que o background tenha pelo menos a largura da janela:
+# escala inicial do background com base na ALTURA atual
+def make_bg_for_height(target_height):
+    orig_w, orig_h = orig_bg.get_width(), orig_bg.get_height()
+    modificador = target_height / orig_h
+    new_w = int(orig_w * modificador)
+    return pygame.transform.scale(orig_bg, (new_w, target_height))
 
 # decide se vai esticar para a largura da janela ou repetir (tile)
-bg_image = pygame.transform.scale(bg_image, (bg_width*modificador, ALTURA))
-# bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
+bg_image = make_bg_for_height(ALTURA)
+bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
 
 # Grupos e sprite
 all_sprites = pygame.sprite.Group()
@@ -46,17 +50,29 @@ max_camera_x = max(0, bg_width- LARGURA)  # limite para não sair do background
 
 # Função auxiliar para (re)configurar tela e background quando muda fullscreen
 def reconfigure_display(fullscreen):
-    global window, LARGURA, ALTURA, left_deadzone, right_deadzone, max_camera_x, bg_image, bg_width, bg_height
+    global window, LARGURA, ALTURA, left_deadzone, right_deadzone
+    global bg_image, bg_width, bg_height, max_camera_x
+
+    # primeiro atualiza dimensões reais da tela (importante)
+    info = pygame.display.Info()
+    LARGURA, ALTURA = info.current_w, info.current_h
+
+    # agora cria a janela/alternativa fullscreen com as novas dimensões
     if fullscreen:
         window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
     else:
         window = pygame.display.set_mode((LARGURA, ALTURA))
-    info = pygame.display.Info()
-    LARGURA, ALTURA = info.current_w, info.current_h
+
     left_deadzone = LARGURA // 3
     right_deadzone = (LARGURA * 2) // 3
-    # Recalcula max_camera_x com base no bg atual (se vc quiser, re-scale bg_image aqui)
+
+    # reescala o background usando a imagem original
+    bg_image = make_bg_for_height(ALTURA)
+
+    # atualiza medidas e limite da câmera
+    bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
     max_camera_x = max(0, bg_width - LARGURA)
+
 
 # Main loop
 running = True
@@ -112,7 +128,6 @@ while game:
     if player_screen_x > right_deadzone and astronauta.speedx > 0:
         # quanto a câmera deve avançar (suavizado)
         desired_shift = astronauta.speedx  # poderia multiplicar por dt ou outro fator
-        camera_x += desired_shift * camera_speed_smooth
         # Use dt para tornar independente de framerate se quiser:
         camera_x += desired_shift * camera_speed_smooth * (dt / 16)
     
