@@ -14,6 +14,19 @@ W, H = window.get_width(), window.get_height()
 clock = pygame.time.Clock()
 FPS = 60
 
+asset = {}
+tiro_animação = []
+for i in range(4):
+    filename = f'assets/img/efeito{i}.png'
+    img = pygame.image.load(filename).convert_alpha()
+    img = pygame.transform.scale(img, (32, 32))
+    tiro_animação.append(img)
+asset['tiro_animação'] = tiro_animação
+
+tiros_group = pygame.sprite.Group()
+
+pygame.mixer.music.load('Prairielearn/referencia/assets\snd/tgfcoder-FrozenJam-SeamlessLoop.ogg')
+pygame.mixer.music.set_volume(0.4)
 # ----- Configuráveis -----
 # Coordenadas da ponta do cano: ajuste conforme o seu fundo (x, y)
 GUN_TIP_POS_P1 = (420, 700)   # jogador da esquerda
@@ -52,6 +65,39 @@ winner_this_round = None
 # efeitos de tiro (tempo em ms)
 last_shot_time_p1 = -9999
 last_shot_time_p2 = -9999
+
+class Tiro(pygame.sprite.Sprite):
+    def __init__(self, center, assets, offset=(0,-15)):
+        pygame.sprite.Sprite.__init__(self)
+
+        self.tiro_animação = assets['tiro_animação']
+        self.frame = 0
+        self.image = self.tiro_animação[self.frame]
+        self.rect = self.image.get_rect()
+        
+        # aplica deslocamento
+        self.rect.centerx = center[0] + offset[0]
+        self.rect.centery = center[1] + offset[1]
+
+        self.last_update = pygame.time.get_ticks()
+        self.frame_ticks = 50
+
+    def update(self):
+        now = pygame.time.get_ticks()
+        elapsed_ticks = now - self.last_update
+
+        if elapsed_ticks > self.frame_ticks:
+            self.last_update = now
+            self.frame += 1
+
+            if self.frame == len(self.tiro_animação):
+                self.kill()
+            else:
+                center = self.rect.center
+                self.image = self.tiro_animação[self.frame]
+                self.rect = self.image.get_rect()
+                self.rect.center = center
+
 
 def start_round():
     global state, state_time, waiting_target_time, winner_this_round
@@ -100,7 +146,7 @@ game = True
 while game:
     dt_ms = clock.tick(FPS)
     now_ms = pygame.time.get_ticks()
-
+    
     # ---------- eventos ----------
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -115,10 +161,16 @@ while game:
                 if event.key == KEY_P1 and winner_this_round is None:
                     # jogador 1 atirou primeiro
                     last_shot_time_p1 = now_ms
+                    tiro = Tiro(GUN_TIP_POS_P1, asset, offset=(+120, -95))
+                    tiros_group.add(tiro)
                     end_round(1)
+
                 elif event.key == KEY_P2 and winner_this_round is None:
                     last_shot_time_p2 = now_ms
+                    tiro = Tiro(GUN_TIP_POS_P2, asset, offset=(-120, -85))
+                    tiros_group.add(tiro)
                     end_round(2)
+
             # se alguém apertar antes do "ja", penalidade opcional:
             elif state in ("preparar", "apontar") and winner_this_round is None:
                 # apertou cedo -> perde a rodada automaticamente
@@ -164,9 +216,12 @@ while game:
     # HUD básico
     title = font.render('Duelo - Melhor de {}'.format(BEST_OF), True, (240,240,240))
     window.blit(title, (W//2 - title.get_width()//2, 20))
-    score_text = small_font.render(f'P1: {score_p1}   P2: {score_p2}   Rodada: {round_number}/{BEST_OF}', True, (255,255,255))
-    window.blit(score_text, (20, 20 + title.get_height()))
-
+    score_pj1 = small_font.render(f'Player 1: {score_p1}', True, (255,255,255))
+    window.blit(score_pj1, (20, 20 + title.get_height()))
+    score_pj2 = small_font.render(f'Player 2: {score_p2}', True, (255,255,255))
+    window.blit(score_pj2, (1400, 20 + title.get_height()))
+    score_best = small_font.render(f'Rodada: {round_number}/3', True, (255,255,255))
+    window.blit(score_best, (W/2, 20 + title.get_height()))
     # desenha as pontas da arma (debug - só para ajuste)
     pygame.draw.circle(window, (0,200,0), (int(GUN_TIP_POS_P1[0]), int(GUN_TIP_POS_P1[1])), 6)
     pygame.draw.circle(window, (200,0,0), (int(GUN_TIP_POS_P2[0]), int(GUN_TIP_POS_P2[1])), 6)
@@ -205,7 +260,7 @@ while game:
             text = font.render(t, True, (255,255,180))
             window.blit(text, (W//2 - text.get_width()//2, H//2 - 80))
 
-    # efeitos de tiro: flash + recuo
+    # efeitos de tiro
     # jogador 1
     if now_ms - last_shot_time_p1 <= FLASH_DURATION_MS:
         age = (now_ms - last_shot_time_p1) / FLASH_DURATION_MS
@@ -228,6 +283,10 @@ while game:
             pygame.draw.line(window, (255,255,255),
                              (GUN_TIP_POS_P2[0], GUN_TIP_POS_P2[1]),
                              (GUN_TIP_POS_P2[0] + recoil_offset, GUN_TIP_POS_P2[1]), 4)
+
+
+    tiros_group.update()
+    tiros_group.draw(window)
 
     pygame.display.flip()
 
