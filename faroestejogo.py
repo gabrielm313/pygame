@@ -15,30 +15,32 @@ clock = pygame.time.Clock()
 FPS = 60
 
 # ----- EFEITOS DA ARMA (4 FRAMES) -----
+# Coloque suas 4 imagens em assets/img/flash1.png ... flash4.png (ou ajuste nomes)
 FLASH_FRAMES_PATHS = [
     os.path.join('assets', 'img', 'efeito1.png'),
     os.path.join('assets', 'img', 'efeito2.png'),
     os.path.join('assets', 'img', 'efeito3.png'),
     os.path.join('assets', 'img', 'efeito4.png'),
 ]
-
 FLASH_DURATION_MS = 140
+# Carrega as 4 imagens como superfícies com alpha
+FLASH_FRAMES = []
+for p in FLASH_FRAMES_PATHS:
+    try:
+        img = pygame.image.load(p).convert_alpha()
+        FLASH_FRAMES.append(img)
+    except Exception as e:
+        print("Erro ao carregar", p, e)
 
-# Carrega as 4 imagens com transparência (sem try/except)
-FLASH_FRAMES = [pygame.image.load(p).convert_alpha() for p in FLASH_FRAMES_PATHS]
-
-# Conta quantos frames foram carregados
 NUM_FLASH_FRAMES = len(FLASH_FRAMES)
-
-# Caso você queira evitar divisão por zero se as imagens não existirem:
 if NUM_FLASH_FRAMES == 0:
-    print("⚠️ Nenhum frame de flash encontrado! Usando fallback simples.")
-    FLASH_FRAMES = [None]
+    # fallback visual simples caso não encontre imagens
     NUM_FLASH_FRAMES = 1
+    FLASH_FRAMES = [None]
 
-# Duração de cada frame (em milissegundos)
+# duração total do flash (ms) já definida: FLASH_DURATION_MS
+# cálculo da duração de cada frame (ms)
 FRAME_DURATION_MS = max(1, int(FLASH_DURATION_MS / NUM_FLASH_FRAMES))
-
 # ----- Configuráveis -----
 # Coordenadas da ponta do cano: ajuste conforme o seu fundo (x, y)
 GUN_TIP_POS_P1 = (420, 700)   # jogador da esquerda
@@ -230,56 +232,30 @@ while game:
             text = font.render(t, True, (255,255,180))
             window.blit(text, (W//2 - text.get_width()//2, H//2 - 80))
 
-# -------------------- efeitos de tiro: flash + recuo (mantém bolinha) --------------------
-def draw_flash_and_recoil_for_player(last_shot_time, gun_tip_pos, flip_horizontal=False):
-    """Desenha o frame do flash (se aplicável) e um recuo simples.
-       Não remove a sua bolinha de debug — apenas adiciona a animação por cima.
-    """
-    now = pygame.time.get_ticks()
-    elapsed = now - last_shot_time
+    # efeitos de tiro: flash + recuo
+    # jogador 1
+    if now_ms - last_shot_time_p1 <= FLASH_DURATION_MS:
+        age = (now_ms - last_shot_time_p1) / FLASH_DURATION_MS
+        rad = int(20 * (1 - age) + 6)
+        # flash
+        pygame.draw.circle(window, (255, 220, 80), (int(GUN_TIP_POS_P1[0]), int(GUN_TIP_POS_P1[1])), rad)
+        # recuo - um pequeno círculo deslocado para trás
+        if now_ms - last_shot_time_p1 <= RECOIL_DURATION_MS:
+            recoil_offset = int(10 * (1 - (now_ms - last_shot_time_p1) / RECOIL_DURATION_MS))
+            pygame.draw.line(window, (255,255,255),
+                             (GUN_TIP_POS_P1[0], GUN_TIP_POS_P1[1]),
+                             (GUN_TIP_POS_P1[0] - recoil_offset, GUN_TIP_POS_P1[1]), 4)
+    # jogador 2
+    if now_ms - last_shot_time_p2 <= FLASH_DURATION_MS:
+        age = (now_ms - last_shot_time_p2) / FLASH_DURATION_MS
+        rad = int(20 * (1 - age) + 6)
+        pygame.draw.circle(window, (255, 220, 80), (int(GUN_TIP_POS_P2[0]), int(GUN_TIP_POS_P2[1])), rad)
+        if now_ms - last_shot_time_p2 <= RECOIL_DURATION_MS:
+            recoil_offset = int(10 * (1 - (now_ms - last_shot_time_p2) / RECOIL_DURATION_MS))
+            pygame.draw.line(window, (255,255,255),
+                             (GUN_TIP_POS_P2[0], GUN_TIP_POS_P2[1]),
+                             (GUN_TIP_POS_P2[0] + recoil_offset, GUN_TIP_POS_P2[1]), 4)
 
-    # Primeiro: desenha a bolinha de debug (mantém o seu visual atual)
-    pygame.draw.circle(window, (255, 220, 80), (int(gun_tip_pos[0]), int(gun_tip_pos[1])), 6)
-
-    # Se disparou recentemente, desenha a animação do flash
-    if elapsed < FLASH_DURATION_MS:
-        # qual frame usar (protegendo caso NUM_FLASH_FRAMES seja 0)
-        frame_index = int(elapsed / FRAME_DURATION_MS)
-        if frame_index >= NUM_FLASH_FRAMES:
-            frame_index = NUM_FLASH_FRAMES - 1
-
-        frame_surf = FLASH_FRAMES[frame_index]
-        if frame_surf:
-            surf_to_blit = frame_surf
-            if flip_horizontal:
-                surf_to_blit = pygame.transform.flip(frame_surf, True, False)
-            fw, fh = surf_to_blit.get_width(), surf_to_blit.get_height()
-            blit_pos = (int(gun_tip_pos[0] - fw / 2), int(gun_tip_pos[1] - fh / 2))
-            window.blit(surf_to_blit, blit_pos)
-        else:
-            # fallback visual se não houver frames (círculo maior)
-            age = elapsed / FLASH_DURATION_MS
-            rad = int(20 * (1 - age) + 6)
-            pygame.draw.circle(window, (255, 220, 80), (int(gun_tip_pos[0]), int(gun_tip_pos[1])), rad)
-
-        # recuo visual (linha) — opcional, decresce com o tempo
-        if elapsed <= RECOIL_DURATION_MS:
-            t = 1 - (elapsed / RECOIL_DURATION_MS)
-            recoil_offset = int(10 * t)
-            if flip_horizontal:
-                start = (gun_tip_pos[0], gun_tip_pos[1])
-                end = (gun_tip_pos[0] - recoil_offset, gun_tip_pos[1])
-            else:
-                start = (gun_tip_pos[0], gun_tip_pos[1])
-                end = (gun_tip_pos[0] + recoil_offset, gun_tip_pos[1])
-            pygame.draw.line(window, (255,255,255), start, end, 4)
-
-# chamar para cada jogador (substitui o bloco de desenho anterior)
-# jogador 1: pinta bolinha + animação (sem flip)
-draw_flash_and_recoil_for_player(last_shot_time_p1, GUN_TIP_POS_P1, flip_horizontal=False)
-# jogador 2: pinta bolinha + animação (flip horizontal se necessário)
-draw_flash_and_recoil_for_player(last_shot_time_p2, GUN_TIP_POS_P2, flip_horizontal=True)
-
-pygame.display.flip()
+    pygame.display.flip()
 
 pygame.quit()
