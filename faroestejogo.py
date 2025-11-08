@@ -1,161 +1,285 @@
 import pygame
+import os
 import random
-import sys
-from pygame.locals import *
+import time
 
-H, L = 1024, 768
+pygame.init()
+window = pygame.display.set_mode((1536, 1090))
+pygame.display.set_caption('Duelo Faroeste - Melhor de 3')
+
+# ----- Assets -----
+fundo = os.path.join('assets', 'img', 'faroeste.png')
+fundo_image = pygame.image.load(fundo).convert()
+W, H = window.get_width(), window.get_height()
+clock = pygame.time.Clock()
 FPS = 60
 
-KEY_P1 = pygame.K_a  #tecla para apertar do jogador esquerdo A
-KEY_P2 = pygame.K_l  #tecla para apertar do jogador direito L
+# ----- EFEITOS DA ARMA (4 FRAMES) -----
+FLASH_FRAMES_PATHS = [
+    os.path.join('assets', 'img', 'efeito1.png'),
+    os.path.join('assets', 'img', 'efeito2.png'),
+    os.path.join('assets', 'img', 'efeito3.png'),
+    os.path.join('assets', 'img', 'efeito4.png'),
+]
 
+FLASH_DURATION_MS = 140
 
-#delay no erro do jogador (em milisegundos)
-erro = 3000
+# Carrega as 4 imagens com transparência (sem try/except)
+FLASH_FRAMES = [pygame.image.load(p).convert_alpha() for p in FLASH_FRAMES_PATHS]
 
+# Conta quantos frames foram carregados
+NUM_FLASH_FRAMES = len(FLASH_FRAMES)
 
-#condição de vitória do jogo (melhor de 3)
-condv = 2
+# Caso você queira evitar divisão por zero se as imagens não existirem:
+if NUM_FLASH_FRAMES == 0:
+    print("⚠️ Nenhum frame de flash encontrado! Usando fallback simples.")
+    FLASH_FRAMES = [None]
+    NUM_FLASH_FRAMES = 1
 
-#contagem regressiva aleatória
-minimo = 1
-máximo = 5
+# Duração de cada frame (em milissegundos)
+FRAME_DURATION_MS = max(1, int(FLASH_DURATION_MS / NUM_FLASH_FRAMES))
 
-#cores texto
-WHITE = (255,255,255)
-RED = (200, 40, 40)
-GREEN = (40, 200, 40)
-YELLOW = (240, 180, 30)
+# ----- Configuráveis -----
+# Coordenadas da ponta do cano: ajuste conforme o seu fundo (x, y)
+GUN_TIP_POS_P1 = (420, 700)   # jogador da esquerda
+GUN_TIP_POS_P2 = (1100, 700)  # jogador da direita
 
+# teclas de tiro (mude se quiser)
+KEY_P1 = pygame.K_a  # jogador 1 aperta 'F'
+KEY_P2 = pygame.K_l   # jogador 2 aperta 'J'
 
-#nova duração do contador
-def new_countdown_duration():
-    #parte feita com o chat
-    #Retorna duração da contangem em ms (aleatória)
-    s = random.uniform(minimo, máximo)
-    return int(s*1000)
+BEST_OF = 3  # melhor de 3
 
-def draw_centered_text(surface, text, font, color, y): # desenha texto no meio da tela
-    txt = font.render(text, True, color)
-    rect = txt.get_rect(center=(L//2, y))
-    surface.blit(txt, rect)
+# tempos (em segundos / ms)
+PREP_TIME = 1.0
+POINT_TIME = 1.0
+MIN_RANDOM_DELAY = 1.0
+MAX_RANDOM_DELAY = 3.0
+FLASH_DURATION_MS = 140
+RECOIL_DURATION_MS = 140
+ROUND_END_PAUSE = 1.0
 
-def main():
-    pygame.init()
-    screen = pygame.display.set_mode((L, H))
-    pygame.display.set_caption("Duelo - Já!")
-    clock = pygame.time.Clock()
-    fundo = pygame.image.load('faroeste.png').convert()
-    fundo = pygame.transform.scale(fundo, (L, H))
-    clock = pygame.time.Clock()
+font = pygame.font.SysFont(None, 56)
+small_font = pygame.font.SysFont(None, 36)
 
-    #fontes
-    big_font = pygame.font.SysFont("consolas", 96)
-    med_font = pygame.font.SysFont("consolas", 40)
-    small_font = pygame.font.SysFont("consolas", 28)
+# estado do jogo
+score_p1 = 0
+score_p2 = 0
+round_number = 1
+game_over = False
 
-    # Estados do round:
-    # 'countdown' -> conta regressiva, aguardando "Já!"
-    # 'ready' -> exibido "Já!", aceita quem apertar primeiro
-    # 'penalty' -> exibe penalidade para quem apertou cedo (mas o round continua)
-    # 'round_end' -> exibe vencedor da rodada e aguarda reinício automático
-    # 'game_over' -> exibe vencedor do jogo
+# estado da rodada
+state = "idle"  # "idle", "preparar", "esperando", "ja", "resultado"
+state_time = 0.0
+waiting_target_time = 0.0
+winner_this_round = None
 
-    state = 'countdown' #estado do jogo
-    nextstate = 0 #próximo estado do tempo
+# efeitos de tiro (tempo em ms)
+last_shot_time_p1 = -9999
+last_shot_time_p2 = -9999
 
-    #temporizadores
-    contador_dur = new_countdown_duration()
-    contador_start = pygame.time.get_ticks()
+def start_round():
+    global state, state_time, waiting_target_time, winner_this_round
+    winner_this_round = None
+    state = "preparar"
+    state_time = pygame.time.get_ticks()
+    # sequência: PREP -> POINT -> espera aleatória -> JA
+    # calculamos quando o "ja" vai ocorrer (só usado em fluxo)
+    waiting_target_time = None
 
-    #penalidades 
-    p1_falta = 0
-    p2_falta = 0
+def set_to_point_phase():
+    global state, state_time, waiting_target_time
+    state = "apontar"
+    state_time = pygame.time.get_ticks()
+    # escolhe o momento aleatório para o "JÁ"
+    delay = random.uniform(MIN_RANDOM_DELAY, MAX_RANDOM_DELAY)
+    waiting_target_time = pygame.time.get_ticks() + int(delay * 1000)
 
-    #placar
-    pontuaçãoP1 = 0
-    pontuaçãoP2 = 0
+def trigger_ja():
+    global state, state_time
+    state = "ja"
+    state_time = pygame.time.get_ticks()
 
-    #vencedor da rodada ('None', 'p1', 'p2')
-    rodV = None
+def end_round(winner):
+    global state, state_time, score_p1, score_p2, round_number, winner_this_round
+    winner_this_round = winner
+    state = "resultado"
+    state_time = pygame.time.get_ticks()
+    if winner == 1:
+        score_p1 += 1
+    elif winner == 2:
+        score_p2 += 1
+    round_number += 1
 
-    # Caso não tenha imagens, desenharemos retângulos pixelizados
-    game = True
-    while game:
-        now = pygame.time.get_ticks()
-        dt =  clock.tick(FPS)
+def check_match_over():
+    # vence quem primeiro chegar a ceil(BEST_OF/2)
+    target = (BEST_OF // 2) + 1
+    if score_p1 >= target or score_p2 >= target:
+        return True
+    return False
 
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                game = False 
+# inicia a primeira rodada
+start_round()
 
-            elif event.type == KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    game = False  
-                if state == 'ready':
-                    #caso não esteja penalizado
-                    if event.key == KEY_P1 and now >= p1_falta:
-                        #se o jogador 1 apertou no momento certo, então vence a rodada
-                        rodV = 'p1'
-                        state = 'round_end'
-                        nextstate = now + 1500 #mostra por 1,5s antes de reiniciar
+game = True
+while game:
+    dt_ms = clock.tick(FPS)
+    now_ms = pygame.time.get_ticks()
 
-                    elif event.key == KEY_P2 and now >= p2_falta:
-                        rodV = 'p2'
-                        state = 'round_end'
-                        nextstate = now + 1500 
-                elif state == 'countdown':
-                    #penalidade pra quem acertou cedo
-                    if event.key == KEY_P1:
-                        p1_falta = max(p1_falta, now + erro)
-                        state = 'penalty'
-                        nextstate = now + 1500  # mostra alerta por 1.5s
-                    elif event.key == KEY_P2:
-                        p2_falta = max(p2_falta, now + erro)
-                        state = 'penalty'
-                        nextstate = now + 1500
-                elif state == 'game_over':
-                    # reinicia o jogo com R
-                    if event.key == pygame.K_r:
-                        pontuaçãoP1 = pontuaçãoP2 = 0
-                        round_winner = None
-                        state = 'countdown'
-                        contador_dur = new_countdown_duration()
-                        contador_start = now    
-
-        #transições automáticas
-        if state == 'countdown':
-            elapsed = now - contador_start
-            if elapsed >= contador_dur:
-                state = 'ready'
-                # quando entrar em 'ready' queremos registrar a hora de início (opcional)
-                ready_start = now
-        elif state == 'penalty':
-            if now >= nextstate:
-                # volta pro countdown (inicia uma nova contagem)
-                state = 'countdown'
-                contador_dur = new_countdown_duration()
-                contador_start = now
-        elif state == 'round_end':
-            # conta placar e verifica fim de jogo
-            if rodV == 'p1': #se o player 1 ganhou a rodada
-                pontuaçãoP1 += 1
-            elif rodV == 'p2': #se o player 2 ganhou a rodada
-                pontuaçãoP2 += 1
-
+    # ---------- eventos ----------
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            game = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                game = False
                 
-            if pontuaçãoP1 >= condv or pontuaçãoP2 >= condv:
-                state = 'game_over'
+        # detectar tecla de tiro apenas quando o estado permite (após "ja")
+        if event.type == pygame.KEYDOWN and not game_over:
+            if state == "ja":
+                if event.key == KEY_P1 and winner_this_round is None:
+                    # jogador 1 atirou primeiro
+                    last_shot_time_p1 = now_ms
+                    end_round(1)
+                elif event.key == KEY_P2 and winner_this_round is None:
+                    last_shot_time_p2 = now_ms
+                    end_round(2)
+            # se alguém apertar antes do "ja", penalidade opcional:
+            elif state in ("preparar", "apontar") and winner_this_round is None:
+                # apertou cedo -> perde a rodada automaticamente
+                if event.key == KEY_P1:
+                    end_round(2)
+                elif event.key == KEY_P2:
+                    end_round(1)
+
+    # ---------- lógica de estado ----------
+    if not game_over:
+        if state == "preparar":
+            # depois do PREP_TIME, vai para "apontar"
+            if now_ms - state_time >= int(PREP_TIME * 1000):
+                set_to_point_phase()
+        elif state == "apontar":
+            # mostra "apontar" apenas POINT_TIME, depois espera aleatória
+            if now_ms - state_time >= int(POINT_TIME * 1000):
+                # aguarda o momento aleatório para "ja"
+                if waiting_target_time is None:
+                    # safety (não deveria acontecer)
+                    waiting_target_time = now_ms + int(random.uniform(MIN_RANDOM_DELAY, MAX_RANDOM_DELAY)*1000)
+                elif now_ms >= waiting_target_time:
+                    trigger_ja()
+        elif state == "ja":
+            # aguarda resultado; se ninguém apertar por 3s consideramos empate e reiniciamos
+            if now_ms - state_time >= 3000 and winner_this_round is None:
+                # empate -> sem pontuação, apenas termina a rodada
+                winner_this_round = 0
+                state = "resultado"
+                state_time = now_ms
+        elif state == "resultado":
+            # espera um tempinho e inicia próxima rodada ou finaliza partida
+            if (now_ms - state_time) >= int(ROUND_END_PAUSE * 1000):
+                if check_match_over() or round_number > BEST_OF:
+                    game_over = True
+                else:
+                    start_round()
+
+    # ---------- render ----------
+    window.fill((0,0,0))
+    window.blit(fundo_image, (0,0))
+
+    # HUD básico
+    title = font.render('Duelo - Melhor de {}'.format(BEST_OF), True, (240,240,240))
+    window.blit(title, (W//2 - title.get_width()//2, 20))
+    score_text = small_font.render(f'P1: {score_p1}   P2: {score_p2}   Rodada: {round_number}/{BEST_OF}', True, (255,255,255))
+    window.blit(score_text, (20, 20 + title.get_height()))
+
+    # desenha as pontas da arma (debug - só para ajuste)
+    pygame.draw.circle(window, (0,200,0), (int(GUN_TIP_POS_P1[0]), int(GUN_TIP_POS_P1[1])), 6)
+    pygame.draw.circle(window, (200,0,0), (int(GUN_TIP_POS_P2[0]), int(GUN_TIP_POS_P2[1])), 6)
+
+    # desenha texto de estado no centro
+    if game_over:
+        # mostra vencedor da partida
+        if score_p1 > score_p2:
+            msg = "Jogador 1 venceu a partida!"
+        elif score_p2 > score_p1:
+            msg = "Jogador 2 venceu a partida!"
+        else:
+            msg = "Empate!"
+        big = font.render(msg, True, (255, 220, 120))
+        window.blit(big, (W//2 - big.get_width()//2, H//2 - 50))
+        hint = small_font.render("Pressione ESC para sair", True, (200,200,200))
+        window.blit(hint, (W//2 - hint.get_width()//2, H//2 + 30))
+    else:
+        if state == "preparar":
+            t_left = max(0, PREP_TIME - (now_ms - state_time)/1000.0)
+            text = font.render("Preparar...", True, (255,255,255))
+            window.blit(text, (W//2 - text.get_width()//2, H//2 - 80))
+        elif state == "apontar":
+            text = font.render("Apontar...", True, (255,255,255))
+            window.blit(text, (W//2 - text.get_width()//2, H//2 - 80))
+        elif state == "ja":
+            text = font.render("JÁ!", True, (255,30,30))
+            window.blit(text, (W//2 - text.get_width()//2, H//2 - 80))
+        elif state == "resultado":
+            if winner_this_round == 1:
+                t = "Jogador 1 venceu a rodada!"
+            elif winner_this_round == 2:
+                t = "Jogador 2 venceu a rodada!"
             else:
-                # preparar novo round depois do tempo next_state_time
-                if now >= nextstate:
-                    rodV = None
-                    state = 'countdown'
-                    contador_dur = new_countdown_duration()
-                    contador_start = now
-        #estado game_over: espera o input 'r' para reiniciar
+                t = "Empate!"
+            text = font.render(t, True, (255,255,180))
+            window.blit(text, (W//2 - text.get_width()//2, H//2 - 80))
 
-        #desenho
+# -------------------- efeitos de tiro: flash + recuo (mantém bolinha) --------------------
+def draw_flash_and_recoil_for_player(last_shot_time, gun_tip_pos, flip_horizontal=False):
+    """Desenha o frame do flash (se aplicável) e um recuo simples.
+       Não remove a sua bolinha de debug — apenas adiciona a animação por cima.
+    """
+    now = pygame.time.get_ticks()
+    elapsed = now - last_shot_time
 
-        screen.blit(fundo, (0, 0))
-                
+    # Primeiro: desenha a bolinha de debug (mantém o seu visual atual)
+    pygame.draw.circle(window, (255, 220, 80), (int(gun_tip_pos[0]), int(gun_tip_pos[1])), 6)
+
+    # Se disparou recentemente, desenha a animação do flash
+    if elapsed < FLASH_DURATION_MS:
+        # qual frame usar (protegendo caso NUM_FLASH_FRAMES seja 0)
+        frame_index = int(elapsed / FRAME_DURATION_MS)
+        if frame_index >= NUM_FLASH_FRAMES:
+            frame_index = NUM_FLASH_FRAMES - 1
+
+        frame_surf = FLASH_FRAMES[frame_index]
+        if frame_surf:
+            surf_to_blit = frame_surf
+            if flip_horizontal:
+                surf_to_blit = pygame.transform.flip(frame_surf, True, False)
+            fw, fh = surf_to_blit.get_width(), surf_to_blit.get_height()
+            blit_pos = (int(gun_tip_pos[0] - fw / 2), int(gun_tip_pos[1] - fh / 2))
+            window.blit(surf_to_blit, blit_pos)
+        else:
+            # fallback visual se não houver frames (círculo maior)
+            age = elapsed / FLASH_DURATION_MS
+            rad = int(20 * (1 - age) + 6)
+            pygame.draw.circle(window, (255, 220, 80), (int(gun_tip_pos[0]), int(gun_tip_pos[1])), rad)
+
+        # recuo visual (linha) — opcional, decresce com o tempo
+        if elapsed <= RECOIL_DURATION_MS:
+            t = 1 - (elapsed / RECOIL_DURATION_MS)
+            recoil_offset = int(10 * t)
+            if flip_horizontal:
+                start = (gun_tip_pos[0], gun_tip_pos[1])
+                end = (gun_tip_pos[0] - recoil_offset, gun_tip_pos[1])
+            else:
+                start = (gun_tip_pos[0], gun_tip_pos[1])
+                end = (gun_tip_pos[0] + recoil_offset, gun_tip_pos[1])
+            pygame.draw.line(window, (255,255,255), start, end, 4)
+
+# chamar para cada jogador (substitui o bloco de desenho anterior)
+# jogador 1: pinta bolinha + animação (sem flip)
+draw_flash_and_recoil_for_player(last_shot_time_p1, GUN_TIP_POS_P1, flip_horizontal=False)
+# jogador 2: pinta bolinha + animação (flip horizontal se necessário)
+draw_flash_and_recoil_for_player(last_shot_time_p2, GUN_TIP_POS_P2, flip_horizontal=True)
+
+pygame.display.flip()
+
+pygame.quit()
