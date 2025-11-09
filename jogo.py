@@ -12,7 +12,8 @@ clock = pygame.time.Clock()
 info = pygame.display.Info()
 LARGURA, ALTURA = info.current_w, info.current_h
 
-window = pygame.display.set_mode((LARGURA , ALTURA))
+# window = pygame.display.set_mode((LARGURA , ALTURA))
+window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 
 #Título do jogo na aba
 pygame.display.set_caption('Joguinho')
@@ -65,8 +66,8 @@ def reconfigure_display(fullscreen):
     else:
         window = pygame.display.set_mode((LARGURA, ALTURA))
 
-    left_deadzone = LARGURA // 3
-    right_deadzone = (LARGURA * 2) // 3
+    # left_deadzone = LARGURA // 3
+    # right_deadzone = (LARGURA * 2) // 3
 
     # reescala o background usando a imagem original
     bg_image = make_bg_for_height(ALTURA)
@@ -104,9 +105,9 @@ while game:
 
             # Dependendo da tecla, altera a velocidade.
             if event.key == pygame.K_LEFT:
-                astronauta.speedx = -10
+                astronauta.speedx = -7
             if event.key == pygame.K_RIGHT:
-                astronauta.speedx = 10
+                astronauta.speedx = 7
             if event.key == pygame.K_SPACE:
                 astronauta.pular()
             if event.key == pygame.K_DOWN:
@@ -129,7 +130,8 @@ while game:
     player_screen_x = astronauta.rect.centerx - camera_x  # onde o player aparece na tela
 
     target_camera_x = astronauta.rect.centerx - right_deadzone
-    # (Escolha só uma das linhas abaixo)
+    
+
     camera_x += (target_camera_x - camera_x) * camera_speed_smooth  # Suave
     
     # Limita câmera aos limites do background
