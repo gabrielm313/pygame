@@ -26,7 +26,7 @@ asset['tiro_animação'] = tiro_animação
 tiros_group = pygame.sprite.Group()
 
 pygame.mixer.music.load('assets\sounds\som1.mp3')
-pygame.mixer.music.set_volume(0.4)
+pygame.mixer.music.set_volume(1)
 
 asset['Som de tiro'] = pygame.mixer.Sound('assets\sounds\som2.mp3')
 # ----- Configuráveis -----
@@ -144,10 +144,10 @@ def check_match_over():
 
 # inicia a primeira rodada
 start_round()
+pygame.mixer.music.play(loops=-1)
 
 game = True
 while game:
-    pygame.mixer.music.play(loops=-1)
     dt_ms = clock.tick(FPS)
     now_ms = pygame.time.get_ticks()
     
