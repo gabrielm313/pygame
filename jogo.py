@@ -12,7 +12,8 @@ clock = pygame.time.Clock()
 info = pygame.display.Info()
 LARGURA, ALTURA = info.current_w, info.current_h
 
-window = pygame.display.set_mode((LARGURA , ALTURA))
+# window = pygame.display.set_mode((LARGURA , ALTURA))
+window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 
 #Título do jogo na aba
 pygame.display.set_caption('Joguinho')
@@ -32,6 +33,7 @@ def make_bg_for_height(target_height):
     new_w = int(orig_w * modificador)
     return pygame.transform.scale(orig_bg, (new_w, target_height))
 
+
 # decide se vai esticar para a largura da janela ou repetir (tile)
 bg_image = make_bg_for_height(ALTURA)
 bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
@@ -47,6 +49,7 @@ camera_speed_smooth = 0.5             # fator para suavizar o movimento (0.0 - 1
 left_deadzone = LARGURA // 3          # 1/3 da tela pela esquerda
 right_deadzone = (LARGURA * 2) // 3   # 1/3 da tela pela direita
 max_camera_x = max(0, bg_width- LARGURA)  # limite para não sair do background
+print(f"bg_width={bg_width}, LARGURA={LARGURA}, max_camera_x={max_camera_x}")
 
 # Função auxiliar para (re)configurar tela e background quando muda fullscreen
 def reconfigure_display(fullscreen):
@@ -63,8 +66,8 @@ def reconfigure_display(fullscreen):
     else:
         window = pygame.display.set_mode((LARGURA, ALTURA))
 
-    left_deadzone = LARGURA // 3
-    right_deadzone = (LARGURA * 2) // 3
+    # left_deadzone = LARGURA // 3
+    # right_deadzone = (LARGURA * 2) // 3
 
     # reescala o background usando a imagem original
     bg_image = make_bg_for_height(ALTURA)
@@ -102,9 +105,9 @@ while game:
 
             # Dependendo da tecla, altera a velocidade.
             if event.key == pygame.K_LEFT:
-                astronauta.speedx = -10
+                astronauta.speedx = -7
             if event.key == pygame.K_RIGHT:
-                astronauta.speedx = 10
+                astronauta.speedx = 7
             if event.key == pygame.K_SPACE:
                 astronauta.pular()
             if event.key == pygame.K_DOWN:
@@ -121,15 +124,15 @@ while game:
 
     # ---- Atualiza os sprites
     all_sprites.update(dt)
+    print(f"x do astronauta: {astronauta.rect.x}, camera_x: {camera_x}")
 
     # posição do jogador na tela (em coordenadas do mundo)
     player_screen_x = astronauta.rect.centerx - camera_x  # onde o player aparece na tela
 
-    if player_screen_x > right_deadzone and astronauta.speedx > 0:
-        # quanto a câmera deve avançar (suavizado)
-        desired_shift = astronauta.speedx  # poderia multiplicar por dt ou outro fator
-        # Use dt para tornar independente de framerate se quiser:
-        camera_x += desired_shift * camera_speed_smooth * (dt / 16)
+    target_camera_x = astronauta.rect.centerx - right_deadzone
+    
+
+    camera_x += (target_camera_x - camera_x) * camera_speed_smooth  # Suave
     
     # Limita câmera aos limites do background
     camera_x = max(0, min(camera_x, max_camera_x))

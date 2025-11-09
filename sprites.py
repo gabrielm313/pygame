@@ -86,8 +86,7 @@ class Astronauta(pygame.sprite.Sprite):
         self.rect.midbottom = midbottom
         
         # Mantém dentro da tela
-        if self.rect.right > LARGURA:
-            self.rect.right = LARGURA
+
         if self.rect.left < 0:
             self.rect.left = 0
 
