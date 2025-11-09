@@ -25,8 +25,10 @@ asset['tiro_animação'] = tiro_animação
 
 tiros_group = pygame.sprite.Group()
 
-pygame.mixer.music.load('Prairielearn/referencia/assets\snd/tgfcoder-FrozenJam-SeamlessLoop.ogg')
+pygame.mixer.music.load('assets\sounds\som1.mp3')
 pygame.mixer.music.set_volume(0.4)
+
+asset['Som de tiro'] = pygame.mixer.Sound('assets\sounds\som2.mp3')
 # ----- Configuráveis -----
 # Coordenadas da ponta do cano: ajuste conforme o seu fundo (x, y)
 GUN_TIP_POS_P1 = (420, 700)   # jogador da esquerda
@@ -47,9 +49,10 @@ FLASH_DURATION_MS = 140
 RECOIL_DURATION_MS = 140
 ROUND_END_PAUSE = 1.0
 
-font = pygame.font.SysFont(None, 56)
-small_font = pygame.font.SysFont(None, 36)
-
+font = pygame.font.Font('assets/font/escrita1.ttf', 56)
+font2 = pygame.font.Font('assets/font\escrita2.ttf', 70)
+small_font = pygame.font.Font('assets/font/escrita1.ttf', 36)
+small_font2 = pygame.font.Font('assets/font\escrita2.ttf', 30)
 # estado do jogo
 score_p1 = 0
 score_p2 = 0
@@ -144,6 +147,7 @@ start_round()
 
 game = True
 while game:
+    pygame.mixer.music.play(loops=-1)
     dt_ms = clock.tick(FPS)
     now_ms = pygame.time.get_ticks()
     
@@ -214,14 +218,14 @@ while game:
     window.blit(fundo_image, (0,0))
 
     # HUD básico
-    title = font.render('Duelo - Melhor de {}'.format(BEST_OF), True, (240,240,240))
+    title = font2.render('DUELO'.format(BEST_OF), True, (255,255,255))
     window.blit(title, (W//2 - title.get_width()//2, 20))
-    score_pj1 = small_font.render(f'Player 1: {score_p1}', True, (255,255,255))
+    score_pj1 = small_font.render(f'PLAYER 1- {score_p1}', True, (255,255,255))
     window.blit(score_pj1, (20, 20 + title.get_height()))
-    score_pj2 = small_font.render(f'Player 2: {score_p2}', True, (255,255,255))
-    window.blit(score_pj2, (1400, 20 + title.get_height()))
-    score_best = small_font.render(f'Rodada: {round_number}/3', True, (255,255,255))
-    window.blit(score_best, (W/2, 20 + title.get_height()))
+    score_pj2 = small_font.render(f'PLAYER 2- {score_p2}', True, (255,255,255))
+    window.blit(score_pj2, (1300, 20 + title.get_height()))
+    score_best = small_font2.render(f'RODADA: {round_number}/3', True, (255,255,255))
+    window.blit(score_best, (700, 20 + title.get_height()))
     # desenha as pontas da arma (debug - só para ajuste)
     pygame.draw.circle(window, (0,200,0), (int(GUN_TIP_POS_P1[0]), int(GUN_TIP_POS_P1[1])), 6)
     pygame.draw.circle(window, (200,0,0), (int(GUN_TIP_POS_P2[0]), int(GUN_TIP_POS_P2[1])), 6)
@@ -230,33 +234,33 @@ while game:
     if game_over:
         # mostra vencedor da partida
         if score_p1 > score_p2:
-            msg = "Jogador 1 venceu a partida!"
+            msg = "JOGADOR 1 VENCEU O JOGO!"
         elif score_p2 > score_p1:
-            msg = "Jogador 2 venceu a partida!"
+            msg = "JOGADOR 2 VENCEU O JOGO!"
         else:
             msg = "Empate!"
-        big = font.render(msg, True, (255, 220, 120))
+        big = font.render(msg, True, (255, 1, 1))
         window.blit(big, (W//2 - big.get_width()//2, H//2 - 50))
-        hint = small_font.render("Pressione ESC para sair", True, (200,200,200))
+        hint = small_font.render("PRESSIONE ESC PARA SAIR", True, (200,200,200))
         window.blit(hint, (W//2 - hint.get_width()//2, H//2 + 30))
     else:
         if state == "preparar":
             t_left = max(0, PREP_TIME - (now_ms - state_time)/1000.0)
-            text = font.render("Preparar...", True, (255,255,255))
+            text = font.render("PREPARAR...", True, (255,255,255))
             window.blit(text, (W//2 - text.get_width()//2, H//2 - 80))
         elif state == "apontar":
-            text = font.render("Apontar...", True, (255,255,255))
+            text = font.render("APONTAR...", True, (255,255,255))
             window.blit(text, (W//2 - text.get_width()//2, H//2 - 80))
         elif state == "ja":
-            text = font.render("JÁ!", True, (255,30,30))
+            text = font.render("JA", True, (10,255,10))
             window.blit(text, (W//2 - text.get_width()//2, H//2 - 80))
         elif state == "resultado":
             if winner_this_round == 1:
-                t = "Jogador 1 venceu a rodada!"
+                t = "JOGADOR 1 VENCEU!"
             elif winner_this_round == 2:
-                t = "Jogador 2 venceu a rodada!"
+                t = "JOGADOR 2 VENCEU!"
             else:
-                t = "Empate!"
+                t = "EMPATE!"
             text = font.render(t, True, (255,255,180))
             window.blit(text, (W//2 - text.get_width()//2, H//2 - 80))
 
