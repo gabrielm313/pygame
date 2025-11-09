@@ -167,12 +167,16 @@ while game:
                     last_shot_time_p1 = now_ms
                     tiro = Tiro(GUN_TIP_POS_P1, asset, offset=(+120, -95))
                     tiros_group.add(tiro)
+                    som = asset["Som de tiro"].play()
+                    som = asset["Som de tiro"].set_volume(0.6)
                     end_round(1)
 
                 elif event.key == KEY_P2 and winner_this_round is None:
                     last_shot_time_p2 = now_ms
                     tiro = Tiro(GUN_TIP_POS_P2, asset, offset=(-120, -85))
                     tiros_group.add(tiro)
+                    som = asset["Som de tiro"].play()
+                    som = asset["Som de tiro"].set_volume(0.6)
                     end_round(2)
 
             # se alguém apertar antes do "ja", penalidade opcional:
