@@ -4,8 +4,10 @@ from os import path
 LARGURA = 1920
 ALTURA = 1080
 
-# Estabelece a pasta que contem as figuras e sons.
+# Estabelece a pasta que contem as figuras.
 IMG_DIR = path.join(path.dirname(__file__), 'assets', 'img')
+
+# BG_PATH = "assets/img/fundo_pg.png"
 
 #ESTADOS POSSÍVEIS SPRITE JOGADOR
 ANDANDO = 0

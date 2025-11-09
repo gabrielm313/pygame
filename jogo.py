@@ -1,12 +1,11 @@
 import pygame
 import os
-from config import LARGURA, ALTURA
+from config import LARGURA, ALTURA , FPS
 from assets import load_assets, ASTRONAUTA_IMG
-from sprites import Astronauta
+from sprites import Astronauta , Bullet
 
 pygame.init()
 clock = pygame.time.Clock()
-
 
 #gera a tela principal com tela cheia
 info = pygame.display.Info()
@@ -41,6 +40,7 @@ bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
 # Grupos e sprite
 all_sprites = pygame.sprite.Group()
 astronauta = Astronauta(all_sprites, assets)
+bullets = pygame.sprite.Group()
 all_sprites.add(astronauta)
 
 # === Camera / scrolling variables ===
@@ -48,8 +48,7 @@ camera_x = 0                          # deslocamento horizontal atual da câmera
 camera_speed_smooth = 0.5             # fator para suavizar o movimento (0.0 - 1.0)
 left_deadzone = LARGURA // 3          # 1/3 da tela pela esquerda
 right_deadzone = (LARGURA * 2) // 3   # 1/3 da tela pela direita
-max_camera_x = max(0, bg_width- LARGURA)  # limite para não sair do background
-print(f"bg_width={bg_width}, LARGURA={LARGURA}, max_camera_x={max_camera_x}")
+max_camera_x = max(0, bg_width - LARGURA)  # limite para não sair do background
 
 # Função auxiliar para (re)configurar tela e background quando muda fullscreen
 def reconfigure_display(fullscreen):
@@ -123,17 +122,28 @@ while game:
                 astronauta.levantar()
 
     # ---- Atualiza os sprites
-    all_sprites.update(dt)
-    print(f"x do astronauta: {astronauta.rect.x}, camera_x: {camera_x}")
+    all_sprites.update(60)
+
 
     # posição do jogador na tela (em coordenadas do mundo)
     player_screen_x = astronauta.rect.centerx - camera_x  # onde o player aparece na tela
 
-    target_camera_x = astronauta.rect.centerx - right_deadzone
+    # decidimos target da câmera com base em ambas deadzones
+    if player_screen_x > right_deadzone:
+        target_camera_x = astronauta.rect.centerx - right_deadzone
+    elif player_screen_x < left_deadzone:
+        target_camera_x = astronauta.rect.centerx - left_deadzone
+    else:
+        target_camera_x = camera_x  # dentro das zonas, não movemos a câmera
+
+    # suaviza movimento da câmera (pode multiplicar por dt/1000 se quiser frame-rate independent)
+    camera_x += (target_camera_x - camera_x) * camera_speed_smooth
+
+    # evitar micro-jitter: se estiver bem próximo, zere a diferença
+    if abs(target_camera_x - camera_x) < 0.5:
+        camera_x = target_camera_x
     
 
-    camera_x += (target_camera_x - camera_x) * camera_speed_smooth  # Suave
-    
     # Limita câmera aos limites do background
     camera_x = max(0, min(camera_x, max_camera_x))
 
