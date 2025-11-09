@@ -3,6 +3,7 @@ import os
 import random
 import time
 
+
 pygame.init()
 window = pygame.display.set_mode((1536, 1090))
 pygame.display.set_caption('Duelo Faroeste - Melhor de 3')
