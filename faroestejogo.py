@@ -126,7 +126,7 @@ def trigger_ja():
     state_time = pygame.time.get_ticks()
 
 def end_round(winner):
-    global state, state_time, score_p1, score_p2, round_number, winner_this_round
+    global state, state_time, score_p1, score_p2, winner_this_round
     winner_this_round = winner
     state = "resultado"
     state_time = pygame.time.get_ticks()
@@ -134,7 +134,7 @@ def end_round(winner):
         score_p1 += 1
     elif winner == 2:
         score_p2 += 1
-    round_number += 1
+    # NÃO incremente round_number aqui — faremos isso quando realmente iniciarmos a próxima rodada
 
 def check_match_over():
     # vence quem primeiro chegar a ceil(BEST_OF/2)
@@ -216,6 +216,7 @@ while game:
                 if check_match_over() or round_number > BEST_OF:
                     game_over = True
                 else:
+                    round_number += 1
                     start_round()
 
     # ---------- render ----------
