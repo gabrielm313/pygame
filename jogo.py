@@ -94,7 +94,7 @@ def reconfigure_display(fullscreen):
         window = pygame.display.set_mode((LARGURA, ALTURA))
 
 
-    # reescala o background usando a imagem original
+    # reescala o background usando a imagem originalxxxxxxxxxxxxaxa
     bg_image = make_bg_for_height(ALTURA)
 
     # atualiza medidas e limite da câmera
@@ -171,7 +171,7 @@ while game:
                         bullets.add(b)
                         all_sprites.add(b)
 
-        # Verifica se soltou alguma tecla.
+        # Verxxxifica se soltou alguma tecla.
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_LEFT and astronauta.speedx < 0:
                 astronauta.speedx = 0

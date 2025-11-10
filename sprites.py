@@ -123,8 +123,8 @@ class Bullet(pygame.sprite.Sprite):
         self.orig_image = self.image
 
         # posição como floats para movimentação suave
-        self.x = float(x) + 40
-        self.y = float(y)-64.5
+        self.x = float(x) + 55
+        self.y = float(y)- 64.5
         self.rect = self.image.get_rect(center=(int(self.x), int(self.y)))
 
         # normaliza o vetor direção
