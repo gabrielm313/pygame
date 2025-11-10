@@ -156,3 +156,24 @@ class Bullet(pygame.sprite.Sprite):
             self.rect.bottom < 0 or self.rect.top > self.world_h):
             self.kill()
 
+
+class Platforma(pygame.sprite.Sprite):
+    def __init__(self, x, y, w, h, image=None):
+        """
+        x, y = coordenadas no MUNDO (top-left)
+        w, h = largura/altura da plataforma
+        image = Surface opcional para desenhar a plataforma
+        """
+        super().__init__()
+        if image:
+            self.image = pygame.transform.scale(image, (w, h))
+        else:
+            # desenho simples para começar
+            self.image = pygame.Surface((w, h), pygame.SRCALPHA)
+            # retângulo cinza com pequena borda
+            pygame.draw.rect(self.image, (120,120,120), (0,0,w,h))
+            pygame.draw.rect(self.image, (80,80,80), (0,0,w,h), 2)
+        self.rect = self.image.get_rect(topleft=(x, y))
+        # mask não é necessário para colisão simples, mas pode ser útil
+        self.mask = pygame.mask.from_surface(self.image)
+
