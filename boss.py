@@ -452,8 +452,46 @@ class Boss:
         if bullet_image_path and os.path.exists(bullet_image_path):
             self.bullet_image = pygame.image.load(bullet_image_path).convert_alpha()
 
+        # <<< NOVO: falas do boss (SFX)
+        self.speech_sounds = []
+        speech7 = os.path.join('assets', 'sounds', 'som7.mp3')
+        speech8 = os.path.join('assets', 'sounds', 'som8.mp3')
+        if os.path.exists(speech7):
+            snd7 = pygame.mixer.Sound(speech7)
+            snd7.set_volume(0.3)
+            self.speech_sounds.append(snd7)
+        if os.path.exists(speech8):
+            snd8 = pygame.mixer.Sound(speech8)
+            snd8.set_volume(0.3)
+            self.speech_sounds.append(snd8)
+
+        # intervalo base (segundos) entre falas quando vida cheia
+        self.speech_interval_base = 4.0
+        # timer acumulado desde a última fala
+        self._speech_timer = 0.0
+        # índice para alternar entre os sons
+        self._speech_index = 0
+        # <<< /NOVO
+
     def update(self, dt):
         self._time += dt
+
+        # <<< NOVO: timer de fala (só enquanto vivo)
+        # só fale se houver sons carregados e ainda estiver vivo (health > 0)
+        if self.speech_sounds and self.health > 0:
+            self._speech_timer += dt
+            # reduz o intervalo conforme a vida diminui (mais urgente quando falta vida)
+            # aqui: quanto menor a vida, menor o intervalo; com limite mínimo
+            health_ratio = max(0.0, self.health / max(1, self.max_health))
+            current_interval = 10
+            if self._speech_timer >= current_interval:
+                # toca o próximo som (alternando)
+                snd = self.speech_sounds[self._speech_index % len(self.speech_sounds)]
+                snd.play()
+                self._speech_index += 1
+                self._speech_timer = 0.0
+        # <<< /NOVO
+
         for i in range(len(self._time_since_last_bullet)):
             self._time_since_last_bullet[i] += dt
         for i in range(len(self._time_since_last_laser)):
@@ -697,7 +735,7 @@ music_path = os.path.join('assets', 'sounds', 'som4.mp3')
 # se o arquivo existir, carrega e toca em loop
 if os.path.exists(music_path):
     pygame.mixer.music.load(music_path)
-    pygame.mixer.music.set_volume(0.5)   # volume entre 0.0 e 1.0
+    pygame.mixer.music.set_volume(0.2)   # volume entre 0.0 e 1.0
     pygame.mixer.music.play(-1)          # -1 = loop infinito
 
 joysticks, joystick_instance_ids = init_joysticks()
