@@ -3,6 +3,7 @@ import os
 import random
 import time
 
+
 pygame.init()
 window = pygame.display.set_mode((1536, 1090))
 pygame.display.set_caption('Duelo Faroeste - Melhor de 3')
@@ -125,7 +126,7 @@ def trigger_ja():
     state_time = pygame.time.get_ticks()
 
 def end_round(winner):
-    global state, state_time, score_p1, score_p2, round_number, winner_this_round
+    global state, state_time, score_p1, score_p2, winner_this_round
     winner_this_round = winner
     state = "resultado"
     state_time = pygame.time.get_ticks()
@@ -133,7 +134,7 @@ def end_round(winner):
         score_p1 += 1
     elif winner == 2:
         score_p2 += 1
-    round_number += 1
+    # NÃO incremente round_number aqui — faremos isso quando realmente iniciarmos a próxima rodada
 
 def check_match_over():
     # vence quem primeiro chegar a ceil(BEST_OF/2)
@@ -167,12 +168,16 @@ while game:
                     last_shot_time_p1 = now_ms
                     tiro = Tiro(GUN_TIP_POS_P1, asset, offset=(+120, -95))
                     tiros_group.add(tiro)
+                    som = asset["Som de tiro"].play()
+                    som = asset["Som de tiro"].set_volume(0.6)
                     end_round(1)
 
                 elif event.key == KEY_P2 and winner_this_round is None:
                     last_shot_time_p2 = now_ms
                     tiro = Tiro(GUN_TIP_POS_P2, asset, offset=(-120, -85))
                     tiros_group.add(tiro)
+                    som = asset["Som de tiro"].play()
+                    som = asset["Som de tiro"].set_volume(0.6)
                     end_round(2)
 
             # se alguém apertar antes do "ja", penalidade opcional:
@@ -211,6 +216,7 @@ while game:
                 if check_match_over() or round_number > BEST_OF:
                     game_over = True
                 else:
+                    round_number += 1
                     start_round()
 
     # ---------- render ----------

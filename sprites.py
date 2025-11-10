@@ -1,4 +1,5 @@
 import pygame
+import math
 from config import LARGURA , ALTURA , GRAVIDADE 
 from assets import ASTRONAUTA_IMG 
 
@@ -10,24 +11,14 @@ class Astronauta(pygame.sprite.Sprite):
         self.groups = groups
         self.assets = assets
 
-        # frames carregados no assets (lista)
-        # self.frames = assets['astronauta1']
+        # (x_offset, y_offset) relativo a rect.center
+        self.gun_offset = (20, -15) 
+        # offsets da arma (relativos a rect.center)
+        self.gun_offset_right = (20, -10)   # ajustar até a bala sair na ponta
+        self.gun_offset_left  = (-20, -10)  # normalmente o X invertido da direita
+        # garante facing padrão
+        self.facing = "right"
 
-        # self.anim = {
-        #     'parado': [0],
-        #     'andando_d': list(range(0, 5)),      # frames 0..4
-        #     'andando_e': list(range(5,10)), # frames 5..9 (apenas se seu sheet tiver)
-        #     'agachando': [10],                 # exemplo
-        # }
-
-        # # Padrões
-        # self.state = 'parado'
-        # self.frame_index = 0
-        # self.frame_timer = 0.0
-        # self.frame_delay = 45  # ms entre frames, ajuste para velocidade de animação
-
-        # self.image_original = self.frames[self.anim['parado'][0]]
-        # self.image = self.image_original.copy()
         self.image = assets[ASTRONAUTA_IMG]
         self.mask = pygame.mask.from_surface(self.image)
         self.rect = self.image.get_rect()
@@ -37,13 +28,27 @@ class Astronauta(pygame.sprite.Sprite):
         self.speedx = 0
         self.speedy = 0
         self.no_chao = True  # controla se está no chão
-        # self.agachado = False
+        # estado de agachar (inicial)
+        self.agachado = False
 
-    # def set_state(self, new_state):
-    #     if self.state != new_state:
-    #         self.state = new_state
-    #         self.frame_index = 0
-    #         self.frame_timer = 0
+    def get_gun_tip(self):
+        """Retorna (x, y) da ponta da arma em coordenadas do mundo."""
+        cx, cy = self.rect.centerx, self.rect.centery
+         # offset padrão (defina em __init__: self.gun_offset = (20, -6))
+        ox, oy = getattr(self, "gun_offset", (100, -100))
+
+        # se tiver offsets específicos por lado, priorize eles
+        if hasattr(self, "gun_offset_right") and hasattr(self, "gun_offset_left"):
+            if getattr(self, "facing", "right") == "right":
+                ox, oy = self.gun_offset_right 
+            else:
+                ox, oy = self.gun_offset_left
+        else:
+            # inverte X se estiver virado para a esquerda
+            if getattr(self, "facing", "right") == "left":
+                ox = -ox
+        
+        return cx + ox, cy + oy
 
     def update(self , dt=0):
         # dt = tempo em ms do clock.tick() ou calculado em loop principal
@@ -58,29 +63,11 @@ class Astronauta(pygame.sprite.Sprite):
         if not self.no_chao:
             self.speedy += GRAVIDADE
 
-        # escolhe animação com base no estado / velocidade
-        # if self.agachado:
-        #     anim_key = 'agachando'
-        # elif self.speedx != 0:
-        #     anim_key = 'andando_d'
-        # else:
-        #     anim_key = 'parado'
-        
-        # # se mudou de animação, reinicia frame
-        # if anim_key != self.state:
-        #     self.set_state(anim_key)
+        if self.speedx > 0:
+            self.facing = "right"
+        elif self.speedx < 0:
+            self.facing = "left"
 
-        # # avança frames de animação
-        # self.frame_timer += dt
-        # frames_idx_list = self.anim.get(anim_key, [0])
-        # if self.frame_timer >= self.frame_delay:
-        #     self.frame_timer = 0
-        #     self.frame_index = (self.frame_index + 1) % len(frames_idx_list)
-
-        # current_frame_number = frames_idx_list[self.frame_index]
-        # self.image = self.frames[current_frame_number]
-        # se precisar ajustar rect (manter bottom/midpoint)
-        # exemplo para manter midbottom:
         midbottom = self.rect.midbottom
         self.rect = self.image.get_rect()
         self.rect.midbottom = midbottom
@@ -108,16 +95,64 @@ class Astronauta(pygame.sprite.Sprite):
             self.no_chao = False
 
     #aqui(agachar) ainda está dando erro
-    def agachar(self):
-         # já está agachado → não faz nada
-        if self.agachado:
-            return
-        # exemplo simples: trocar a flag e animação
-        self.agachado = True
-        self.set_state('agachando')
+    # def agachar(self):
+    #      # já está agachado → não faz nada
+    #     if self.agachado:
+    #         return
+    #     # exemplo simples: trocar a flag e animação
+    #     self.agachado = True
+    #     self.set_state('agachando')
 
-    def levantar(self):
-        if not self.agachado:
-            return
-        self.agachado = False
-        self.set_state('parado')
+    # def levantar(self):
+    #     if not self.agachado:
+    #         return
+    #     self.agachado = False
+    #     self.set_state('parado')
+
+
+
+class Bullet(pygame.sprite.Sprite):
+    def __init__(self, x, y, dir_x, dir_y, speed=500, world_w=2000, world_h=1000):
+        """
+        speed: pixels por segundo
+        """
+        super().__init__()
+        # visual simples; substitua por imagem / asset se quiser
+        self.image = pygame.Surface((15, 8), pygame.SRCALPHA)
+        pygame.draw.rect(self.image, (255,0,255), self.image.get_rect())
+        self.orig_image = self.image
+
+        # posição como floats para movimentação suave
+        self.x = float(x) + 40
+        self.y = float(y)-64.5
+        self.rect = self.image.get_rect(center=(int(self.x), int(self.y)))
+
+        # normaliza o vetor direção
+        length = math.hypot(dir_x, dir_y)
+        if length == 0:
+            self.dir_x, self.dir_y = 1.0, 0.0
+        else:
+            self.dir_x, self.dir_y = dir_x / length, dir_y / length
+
+        self.speed = speed
+
+        # limites do mundo
+        self.world_w = world_w
+        self.world_h = world_h
+
+        # rotaciona a imagem para apontar na direção do tiro (opcional)
+        angle_deg = -math.degrees(math.atan2(self.dir_y, self.dir_x))
+        self.image = pygame.transform.rotate(self.orig_image, angle_deg)
+        self.rect = self.image.get_rect(center=(int(self.x), int(self.y)))
+
+    def update(self, dt):
+        
+        self.x += self.dir_x * self.speed * dt
+        self.y += self.dir_y * self.speed * dt
+        self.rect.center = (int(self.x), int(self.y))
+
+        # mata se sair dos limites do mundo
+        if (self.rect.right < 0 or self.rect.left > self.world_w or
+            self.rect.bottom < 0 or self.rect.top > self.world_h):
+            self.kill()
+

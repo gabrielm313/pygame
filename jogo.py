@@ -1,8 +1,9 @@
 import pygame
+import math
 import os
-from config import LARGURA, ALTURA , FPS
-from assets import load_assets, ASTRONAUTA_IMG
-from sprites import Astronauta , Bullet
+from config import LARGURA , ALTURA , FPS
+from assets import load_assets
+import sprites
 
 pygame.init()
 clock = pygame.time.Clock()
@@ -10,8 +11,6 @@ clock = pygame.time.Clock()
 #gera a tela principal com tela cheia
 info = pygame.display.Info()
 LARGURA, ALTURA = info.current_w, info.current_h
-
-# window = pygame.display.set_mode((LARGURA , ALTURA))
 window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 
 #Título do jogo na aba
@@ -37,18 +36,47 @@ def make_bg_for_height(target_height):
 bg_image = make_bg_for_height(ALTURA)
 bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
 
+Astronauta = sprites.Astronauta
+Bullet = sprites.Bullet
+
 # Grupos e sprite
 all_sprites = pygame.sprite.Group()
-astronauta = Astronauta(all_sprites, assets)
 bullets = pygame.sprite.Group()
+
+astronauta = Astronauta(all_sprites, assets)
 all_sprites.add(astronauta)
 
 # === Camera / scrolling variables ===
-camera_x = 0                          # deslocamento horizontal atual da câmera
-camera_speed_smooth = 0.5             # fator para suavizar o movimento (0.0 - 1.0)
-left_deadzone = LARGURA // 3          # 1/3 da tela pela esquerda
-right_deadzone = (LARGURA * 2) // 3   # 1/3 da tela pela direita
+camera_x = 0                               # deslocamento horizontal atual da câmera
+camera_speed_smooth = 0.5                  # fator para suavizar o movimento (0.0 - 1.0)
+left_deadzone = LARGURA // 3               # 1/3 da tela pela esquerda
+right_deadzone = (LARGURA * 2) // 3        # 1/3 da tela pela direita
 max_camera_x = max(0, bg_width - LARGURA)  # limite para não sair do background
+
+# tiro / cooldown
+SHOT_COOLDOWN_MS = 150
+last_shot_time = 0
+
+# bloqueio de voltar para a região já passada
+LEFT_BACKTRACK_MARGIN = 8
+CAMERA_ONLY_FORWARD = False  # se True, câmera só anda pra frente
+
+# helper: direção apenas pelas setas (retorna -1/0/1)
+from pygame import K_LEFT, K_RIGHT, K_UP, K_DOWN
+
+def get_shot_direction_from_arrows():
+    keys = pygame.key.get_pressed()
+    dx = 0
+    dy = 0
+    if keys[K_RIGHT]:
+        dx += 1
+    if keys[K_LEFT]:
+        dx -= 1
+    if keys[K_DOWN]:
+        dy += 1
+    if keys[K_UP]:
+        dy -= 1
+    return dx, dy
 
 # Função auxiliar para (re)configurar tela e background quando muda fullscreen
 def reconfigure_display(fullscreen):
@@ -65,8 +93,6 @@ def reconfigure_display(fullscreen):
     else:
         window = pygame.display.set_mode((LARGURA, ALTURA))
 
-    # left_deadzone = LARGURA // 3
-    # right_deadzone = (LARGURA * 2) // 3
 
     # reescala o background usando a imagem original
     bg_image = make_bg_for_height(ALTURA)
@@ -82,7 +108,9 @@ fullscreen = True
 
 game = True
 while game:
-    dt = clock.tick(60)  # limita a 60 FPS
+    # dt em milissegundos e segundos
+    dt_ms = clock.tick(FPS)
+    dt = dt_ms / 1000.0
 
     for event in pygame.event.get():
         # ----- Verifica consequências
@@ -100,17 +128,48 @@ while game:
                 
                 # recalcula deadzones se necessário
                 left_deadzone = LARGURA // 3
-                right_deadzone = (LARGURA * 2) // 3
+                right_deadzone = (LARGURA * 2) // 3 + 100
 
             # Dependendo da tecla, altera a velocidade.
             if event.key == pygame.K_LEFT:
-                astronauta.speedx = -7
+                astronauta.speedx = -7 
             if event.key == pygame.K_RIGHT:
-                astronauta.speedx = 7
-            if event.key == pygame.K_SPACE:
-                astronauta.pular()
+               astronauta.speedx = 7 
+            if event.key == pygame.K_c:
+                if hasattr(astronauta, "pular"):
+                    astronauta.pular()
             if event.key == pygame.K_DOWN:
-                astronauta.agachar()
+                if hasattr(astronauta, "agachar"):
+                    astronauta.agachar()
+            
+            # ---------- DISPARO: dispara apenas se SETA estiver pressionada ----------
+            # dispara ao apertar qualquer letra, mas só cria bala se setas definirem direção
+            if event.key == pygame.K_x:
+                now = pygame.time.get_ticks()
+                if now - last_shot_time >= SHOT_COOLDOWN_MS:
+                    # pega direção a partir das setas
+                    dir_x, dir_y = get_shot_direction_from_arrows()
+
+                    # se nenhuma seta pressionada, NÃO DISPARA
+                    if dir_x == 0 and dir_y == 0:
+                        # se quiser fallback para facing, substitua por:
+                        # if hasattr(astronauta, "facing"): dir_x = 1 if astronauta.facing == "right" else -1
+                        # else: dir_x = 1
+                        pass  # não dispara: continua no loop
+                    else:
+                        last_shot_time = now
+
+                        # posição do cano (mundo) — usa get_gun_tip() se tiver
+                        if hasattr(astronauta, "get_gun_tip"):
+                            gun_x, gun_y = astronauta.get_gun_tip()
+                        else:
+                            gun_x, gun_y = astronauta.rect.centerx + 20, astronauta.rectc.centerccy
+
+                        # cria a bala usando vetor das setas (Bullet normaliza internamente)
+                        b = Bullet(gun_x, gun_y, dir_x, dir_y,
+                                   speed=900, world_w=bg_width, world_h=bg_height)
+                        bullets.add(b)
+                        all_sprites.add(b)
 
         # Verifica se soltou alguma tecla.
         if event.type == pygame.KEYUP:
@@ -119,11 +178,18 @@ while game:
             if event.key == pygame.K_RIGHT and astronauta.speedx > 0:
                 astronauta.speedx = 0
             if event.key == pygame.K_DOWN:
-                astronauta.levantar()
+                if hasattr(astronauta, "levantar"):
+                    astronauta.levantar()
+        
+        # Tratamento de resize (se usar janela)
+        if event.type == pygame.VIDEORESIZE:
+            LARGURA, ALTURA = event.w, event.h
+            reconfigure_display(fullscreen=False)
 
     # ---- Atualiza os sprites
-    all_sprites.update(60)
+    all_sprites.update(dt)
 
+    bullets.update(dt)
 
     # posição do jogador na tela (em coordenadas do mundo)
     player_screen_x = astronauta.rect.centerx - camera_x  # onde o player aparece na tela
@@ -146,6 +212,13 @@ while game:
 
     # Limita câmera aos limites do background
     camera_x = max(0, min(camera_x, max_camera_x))
+
+    # Trava jogador para não voltar para área já passada
+    min_allowed_x = int(camera_x) + LEFT_BACKTRACK_MARGIN
+    if astronauta.rect.left < min_allowed_x:
+        astronauta.rect.left = min_allowed_x
+        if astronauta.speedx < 0:
+            astronauta.speedx = 0
 
     window.fill((0, 0, 0))
     window.blit(bg_image, (-int(camera_x), 0))
