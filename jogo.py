@@ -36,15 +36,32 @@ def make_bg_for_height(target_height):
 bg_image = make_bg_for_height(ALTURA)
 bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
 
+print("SCREEN:", LARGURA, ALTURA)
+print("BG scaled:", bg_image.get_width(), bg_image.get_height())
+print("camera_x max:", max_camera_x)
+
 Astronauta = sprites.Astronauta
 Bullet = sprites.Bullet
+Platforma = sprites.Platforma
+
 
 # Grupos e sprite
 all_sprites = pygame.sprite.Group()
 bullets = pygame.sprite.Group()
+platformas = pygame.sprite.Group()
 
 astronauta = Astronauta(all_sprites, assets)
 all_sprites.add(astronauta)
+
+# posições em pixels do mundo (x bem maior que LARGURA para aparecer conforme o bg avança)
+p1 = Platforma(300, ALTURA - 150, 200, 20)   # plataforma relativamente próxima
+p2 = Platforma(1200, ALTURA - 220, 250, 20)  # plataforma mais adiante
+p3 = Platforma(2000, ALTURA - 180, 160, 20)  # ainda mais à frente
+platformas.add(p1, p2, p3)
+
+# se quiser que plataformas façam parte de all_sprites (para update/draw automático):
+for p in platformas:
+    all_sprites.add(p)
 
 # === Camera / scrolling variables ===
 camera_x = 0                               # deslocamento horizontal atual da câmera
@@ -187,9 +204,28 @@ while game:
             reconfigure_display(fullscreen=False)
 
     # ---- Atualiza os sprites
+    prev_bottom = astronauta.rect.bottom
     all_sprites.update(dt)
-
     bullets.update(dt)
+
+    # --- antes de atualizar sprites
+prev_bottom = astronauta.rect.bottom
+all_sprites.update(dt)
+bullets.update(dt)
+
+# checagem one-way platforms
+landed_on_platform = False
+for plat in platformas:
+    if astronauta.rect.colliderect(plat.rect):
+        if prev_bottom <= plat.rect.top + 2 and astronauta.speedy >= 0:  # +2 tolerância
+            astronauta.rect.bottom = plat.rect.top
+            astronauta.speedy = 0
+            astronauta.no_chao = True
+            landed_on_platform = True
+            break
+if not landed_on_platform and astronauta.rect.bottom < ALTURA - 40:
+    astronauta.no_chao = False
+
 
     # posição do jogador na tela (em coordenadas do mundo)
     player_screen_x = astronauta.rect.centerx - camera_x  # onde o player aparece na tela
