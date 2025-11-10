@@ -1,7 +1,7 @@
 import pygame
 import os
 import math
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 # ---------------- Utilidade: carregar frames de uma pasta ----------------
 def load_frames_from_folder(folder: str, keep_alpha=True) -> List[pygame.Surface]:
@@ -38,8 +38,8 @@ class Player:
         self.vel_x = 0.0
         self.vel_y = 0.0
         self.SPEED = 700.0
-        self.JUMP_VELOCITY = -1200.0
-        self.GRAVITY = 2500.0
+        self.JUMP_VELOCITY = -1500.0
+        self.GRAVITY = 3000.0
         self.grounded = True
 
         # tiro
@@ -47,12 +47,22 @@ class Player:
         self._time_since_last_shot = 0.0
         self.gun_offset = (self.w // 2, self.h // 2)
 
+        self.shot_sound = None
+        shot_path = os.path.join('assets', 'sounds', 'som6.mp3')
+        if os.path.exists(shot_path):
+            self.shot_sound = pygame.mixer.Sound(shot_path)
+            self.shot_sound.set_volume(0.2 )
+
         # vida / invuln / morte
         self.max_health = 5
         self.health = self.max_health
         self.invuln_time = 0.8
         self._invuln_timer = 0.0
         self.dead = False
+
+        # animação
+        ...
+
 
         # animação
         self.anim_root = anim_root
@@ -100,13 +110,8 @@ class Player:
             self.rect.y = self.ground_y - self.h
 
     def handle_input_keyboard(self, keys, left_key, right_key, look_up_key, aim_keys):
-        """
-        fallback keyboard input per player:
-        left_key/right_key = movement
-        look_up_key = hold to aim up
-        aim_keys = dict of keys -> aim vector (like {K_i:(0,-1), ...})
-        """
         if self.dead:
+            self.vel_x = 0.0
             return
         vx = 0.0
         if keys[left_key]:
@@ -119,7 +124,6 @@ class Player:
         elif self.vel_x < 0:
             self.facing_right = False
 
-        # look up override
         if look_up_key and keys[look_up_key]:
             self.aim = (0, -1)
         else:
@@ -129,7 +133,6 @@ class Player:
                     ax += vec[0]
                     ay += vec[1]
             if ax != 0 or ay != 0:
-                # normalize to -1/0/1 grid (keeps directional intent)
                 ax = max(-1, min(1, ax))
                 ay = max(-1, min(1, ay))
                 self.aim = (ax, ay)
@@ -150,7 +153,6 @@ class Player:
             if self._invuln_timer < 0:
                 self._invuln_timer = 0.0
 
-        # física
         self.rect.x += int(self.vel_x * dt)
         if self.rect.left < 0:
             self.rect.left = 0
@@ -165,7 +167,6 @@ class Player:
         else:
             self.grounded = False
 
-        # estado
         if not self.grounded:
             self.state = 'jump'
         else:
@@ -174,7 +175,6 @@ class Player:
             else:
                 self.state = 'idle'
 
-        # animações
         self._update_legs_anim(dt)
         self._update_torso_anim(dt)
 
@@ -221,16 +221,27 @@ class Player:
             self.torso_timer = 0.0
 
     def can_shoot(self) -> bool:
-        return not self.dead and self._time_since_last_shot >= self.fire_cooldown
+        return (not self.dead) and (self._time_since_last_shot >= self.fire_cooldown)
 
-    def shoot(self, direction: Tuple[float, float], bullet_image=None):
+    def shoot(self, direction: Tuple[float, float], bullet_image=None) -> Optional["Bullet"]:
+        """
+        Cria e retorna uma Bullet com owner=self.
+        Retorna None se não puder atirar.
+        """
         if not self.can_shoot():
             return None
         self._time_since_last_shot = 0.0
         spawn_x = self.rect.centerx + self.gun_offset[0] - self.w // 2
         spawn_y = self.rect.centery + self.gun_offset[1] - self.h // 2
-        b = Bullet(spawn_x, spawn_y, direction, image=bullet_image)
+        b = Bullet(spawn_x, spawn_y, direction, image=bullet_image, owner=self)
+
+        # toca o som do tiro (se carregado)
+        # toca o som do tiro (se carregado)
+        if self.shot_sound:
+            self.shot_sound.play()
+
         return b
+
 
     def take_damage(self, amount: int):
         if self._invuln_timer > 0.0 or self.dead:
@@ -249,62 +260,89 @@ class Player:
         print("Player morreu!")
 
     def is_alive(self) -> bool:
-        return self.health > 0 and not self.dead
+        return (self.health > 0) and (not self.dead)
 
     def draw(self, surface):
         if self.dead:
-            if self.image:
-                surface.blit(self.image, (self.rect.x, self.rect.y))
-            else:
-                pygame.draw.rect(surface, (100, 100, 100), self.rect)
             return
 
-        # full jump
+        # --- desenho do player (jump/full ou legs+torso) ---
         if self.state == 'jump' and self.full_jump:
             frame = self.full_jump[0]
             frame_to_draw = frame
             if not self.facing_right:
                 frame_to_draw = pygame.transform.flip(frame, True, False)
             surface.blit(frame_to_draw, (self.rect.x, self.rect.y))
-            return
-
-        legs_frames = self.legs_walk if (self.state == 'walk' and self.legs_walk) else (self.legs_idle if self.legs_idle else [])
-        if legs_frames:
-            leg_frame = legs_frames[self.legs_index % len(legs_frames)]
-            if not self.facing_right:
-                leg_frame = pygame.transform.flip(leg_frame, True, False)
-            surface.blit(leg_frame, (self.rect.x, self.rect.y))
-
-        key = self._choose_torso_key()
-        torso_frames = self.torso_anims.get(key) or self.torso_anims.get('neutral') or []
-        if torso_frames:
-            torso_frame = torso_frames[self.torso_index % len(torso_frames)]
-            if not self.facing_right:
-                torso_frame = pygame.transform.flip(torso_frame, True, False)
-            surface.blit(torso_frame, (self.rect.x, self.rect.y))
         else:
-            if self.image:
-                frame = self.image
+            legs_frames = self.legs_walk if (self.state == 'walk' and self.legs_walk) else (self.legs_idle if self.legs_idle else [])
+            if legs_frames:
+                leg_frame = legs_frames[self.legs_index % len(legs_frames)]
                 if not self.facing_right:
-                    frame = pygame.transform.flip(frame, True, False)
-                surface.blit(frame, (self.rect.x, self.rect.y))
-            else:
-                pygame.draw.rect(surface, (200, 30, 30), self.rect)
+                    leg_frame = pygame.transform.flip(leg_frame, True, False)
+                surface.blit(leg_frame, (self.rect.x, self.rect.y))
 
-# ---------------- Bullet ----------------
+            key = self._choose_torso_key()
+            torso_frames = self.torso_anims.get(key) or self.torso_anims.get('neutral') or []
+            if torso_frames:
+                torso_frame = torso_frames[self.torso_index % len(torso_frames)]
+                if not self.facing_right:
+                    torso_frame = pygame.transform.flip(torso_frame, True, False)
+                surface.blit(torso_frame, (self.rect.x, self.rect.y))
+            else:
+                if self.image:
+                    frame = self.image
+                    if not self.facing_right:
+                        frame = pygame.transform.flip(frame, True, False)
+                    surface.blit(frame, (self.rect.x, self.rect.y))
+                else:
+                    pygame.draw.rect(surface, (200, 30, 30), self.rect)
+
+        # --- barra de vida azul acima da cabeça ---
+        # dimensões da barra (ajuste se quiser)
+        bar_w = max(40, self.w)        # largura da barra: pelo menos 40 para personagens pequenos
+        bar_h = 8                      # altura da barra
+        bar_x = self.rect.x
+        bar_y = self.rect.y - (bar_h + 6)
+
+        # fundo escuro
+        bg_rect = pygame.Rect(bar_x, bar_y, bar_w, bar_h)
+        pygame.draw.rect(surface, (30, 30, 50), bg_rect)
+
+        # preenchimento proporcional ao HP
+        hp_ratio = max(0.0, min(1.0, float(self.health) / float(self.max_health)))
+        fill_w = int(bar_w * hp_ratio)
+        fill_rect = pygame.Rect(bar_x, bar_y, fill_w, bar_h)
+
+        # efeito de piscar durante invulnerabilidade
+        if hasattr(self, "_invuln_timer") and self._invuln_timer > 0.0:
+            # alterna cor a cada ~120ms
+            if (pygame.time.get_ticks() // 120) % 2 == 0:
+                fill_color = (120, 180, 255)   # azul claro
+            else:
+                fill_color = (80, 130, 220)    # azul mais escuro
+        else:
+            fill_color = (40, 140, 255)        # azul principal
+
+        if fill_w > 0:
+            pygame.draw.rect(surface, fill_color, fill_rect)
+
+        # borda da barra
+        pygame.draw.rect(surface, (200, 200, 220), bg_rect, 1)
+
+# ---------------- Bullet (com owner) ----------------
 class Bullet:
     SPEED = 900.0
     RADIUS = 6
     COLOR = (255, 220, 0)
     LIFETIME = 3.5
 
-    def __init__(self, x, y, direction: Tuple[float, float], image: pygame.Surface = None):
+    def __init__(self, x, y, direction: Tuple[float, float], image: pygame.Surface = None, owner: Optional[object] = None):
         self.x = float(x)
         self.y = float(y)
         dx, dy = direction
         if dx == 0 and dy == 0:
             dx = 1.0
-        length = math.hypot(dx, dy)
+        length = math.hypot(dx, dy) or 1.0
         self.dir_x = dx / length
         self.dir_y = dy / length
         self.speed = Bullet.SPEED
@@ -316,6 +354,7 @@ class Bullet:
         if self.image:
             diameter = max(6, self.radius * 2)
             self.image = pygame.transform.smoothscale(self.image, (diameter, diameter))
+        self.owner = owner  # owner pode ser Player instance, 'boss', None, etc.
 
     def update(self, dt, screen_w, screen_h):
         self.x += self.dir_x * self.speed * dt
@@ -402,11 +441,11 @@ class Boss:
 
         self.hand_offsets = [int(self.w * 0.22), int(self.w * 0.78) - 12]
         self.hand_bullet_cooldowns = [1.2, 1.2]
-        self._time_since_last_bullet = [0.0, 0.0]
+        self._time_since_last_bullet = [0.0 for _ in self.hand_offsets]
         self.hand_laser_cooldowns = [6.0, 6.0]
-        self._time_since_last_laser = [0.0, 0.0]
-        self.laser_width = 60
-        self.laser_height = 260
+        self._time_since_last_laser = [0.0 for _ in self.hand_offsets]
+        self.laser_width = 120
+        self.laser_height = int(screen_h * 0.55)  # ~55% da altura da tela
         self.laser_duration = 1.2
         self.laser_damage_per_second = 3.0
         self.bullet_image = None
@@ -415,8 +454,9 @@ class Boss:
 
     def update(self, dt):
         self._time += dt
-        for i in range(2):
+        for i in range(len(self._time_since_last_bullet)):
             self._time_since_last_bullet[i] += dt
+        for i in range(len(self._time_since_last_laser)):
             self._time_since_last_laser[i] += dt
         self.rect.x += int(self.direction * self.speed * dt)
         if self.rect.x < self.patrol_min_x:
@@ -427,36 +467,49 @@ class Boss:
             self.direction = -1
         self._y_offset = math.sin(2 * math.pi * self.bob_frequency * self._time) * self.bob_amplitude
 
-    def try_shoot_hands(self, player_center):
+    def try_shoot_hands_at_players(self, player_centers: List[Tuple[int, int]]):
         bullets = []
-        px, py = player_center
+        if not player_centers:
+            return bullets
         draw_y = int(self.rect.y + getattr(self, '_y_offset', 0))
         for i, offset in enumerate(self.hand_offsets):
+            if i >= len(self._time_since_last_bullet):
+                continue
             if self._time_since_last_bullet[i] < self.hand_bullet_cooldowns[i]:
                 continue
-            self._time_since_last_bullet[i] = 0.0
             spawn_x = int(self.rect.x + offset)
             spawn_y = draw_y + self.h - 10
-            dx = px - spawn_x
-            dy = py - spawn_y
-            length = math.hypot(dx, dy)
-            if length == 0:
-                length = 1.0
-            b = Bullet(spawn_x, spawn_y, (dx/length, dy/length), image=self.bullet_image)
+            best = None
+            best_dist = None
+            for c in player_centers:
+                dx = c[0] - spawn_x
+                dy = c[1] - spawn_y
+                d = dx*dx + dy*dy
+                if best is None or d < best_dist:
+                    best = (dx, dy)
+                    best_dist = d
+            if best is None:
+                continue
+            dx, dy = best
+            length = math.hypot(dx, dy) or 1.0
+            b = Bullet(spawn_x, spawn_y, (dx/length, dy/length), image=self.bullet_image, owner='boss')
             bullets.append(b)
+            self._time_since_last_bullet[i] = 0.0
         return bullets
 
-    def try_fire_lasers_per_hand(self, player_rect):
+    def try_fire_lasers(self):
         lasers = []
         for i, offset in enumerate(self.hand_offsets):
+            if i >= len(self._time_since_last_laser):
+                continue
             if self._time_since_last_laser[i] < self.hand_laser_cooldowns[i]:
                 continue
-            self._time_since_last_laser[i] = 0.0
             laser = BossLaser(self, offset - (self.laser_width // 2) + 6,
                               self.laser_width, self.laser_height,
                               duration=self.laser_duration,
                               damage_per_second=self.laser_damage_per_second)
             lasers.append(laser)
+            self._time_since_last_laser[i] = 0.0
         return lasers
 
     def draw(self, surface):
@@ -472,7 +525,6 @@ class Boss:
 # ------------------ suporte multi-mapeamento por joystick ------------------
 AXIS_DEADZONE = 0.25
 
-# configure indexes for each joystick here (change GAMEPAD_MAPS[1] for controller 2 if needed)
 GAMEPAD_MAPS = [
     {   # joystick 0 (controle 1)
         "move_axis_x": 0,
@@ -481,7 +533,8 @@ GAMEPAD_MAPS = [
         "aim_axis_y": 3,
         "dpad_hat": 0,
         "button_jump": 0,
-        "button_fire": 1,
+        # remove button_fire mapping here (we will use trigger_axis)
+        "trigger_axis": 5,   # RT -> trocar se necessário
     },
     {   # joystick 1 (controle 2) - ajustável
         "move_axis_x": 0,
@@ -490,15 +543,17 @@ GAMEPAD_MAPS = [
         "aim_axis_y": 3,
         "dpad_hat": 0,
         "button_jump": 0,
-        "button_fire": 1,
+        "trigger_axis": 5,   # RT
     }
 ]
 
 joysticks: List[pygame.joystick.Joystick] = []
 joystick_instance_ids: List[int] = []
-joystick_to_player_index = {}  # physical joystick index -> player index (0->player1, 1->player2)
+joystick_to_player_index = {}
 
 def get_map_for_joystick_physical_index(i: int) -> dict:
+    if i is None:
+        return GAMEPAD_MAPS[0]
     if i < len(GAMEPAD_MAPS):
         return GAMEPAD_MAPS[i]
     return GAMEPAD_MAPS[0]
@@ -527,15 +582,17 @@ def read_axis_with_deadzone(joy, axis_idx):
     return val
 
 def handle_joystick_event(event, players_list, bullets_list):
-    # prints to help mapping - keep these while setting up your controllers
+    print_event = False
     if event.type == pygame.JOYAXISMOTION:
-        print(f"JOY AXIS: joy={getattr(event,'joy',None)} axis={event.axis} value={event.value:.3f}")
+        print_event = True
     elif event.type == pygame.JOYBUTTONDOWN:
-        print(f"JOY BUTTON DOWN: joy={getattr(event,'joy',None)} button={event.button}")
+        print_event = True
     elif event.type == pygame.JOYBUTTONUP:
-        print(f"JOY BUTTON UP: joy={getattr(event,'joy',None)} button={event.button}")
+        print_event = True
     elif event.type == pygame.JOYHATMOTION:
-        print(f"JOY HAT: joy={getattr(event,'joy',None)} hat={event.hat} value={event.value}")
+        print_event = True
+    if print_event:
+        print(event)
 
     jid = getattr(event, "instance_id", getattr(event, "joy", None))
     player_index = None
@@ -553,69 +610,29 @@ def handle_joystick_event(event, players_list, bullets_list):
         player = players_list[player_index]
         pad_map = get_map_for_joystick_physical_index(joy_physical_index)
 
-        if btn == pad_map["button_jump"]:
+        # JUMP still handled by button
+        if btn == pad_map.get("button_jump"):
             player.try_jump()
             return
 
-        if btn == pad_map["button_fire"]:
-            joy = joysticks[joy_physical_index] if (joy_physical_index is not None and joy_physical_index < len(joysticks)) else None
-            aim_ax = pad_map.get("aim_axis_x", None)
-            aim_ay = pad_map.get("aim_axis_y", None)
-            if joy is not None and aim_ax is not None and aim_ay is not None and joy.get_numaxes() > max(aim_ax, aim_ay):
-                raw_ax = joy.get_axis(aim_ax)
-                raw_ay = joy.get_axis(aim_ay)
-                ax = read_axis_with_deadzone(joy, aim_ax)
-                ay = read_axis_with_deadzone(joy, aim_ay)
-                if ax != 0.0 or ay != 0.0:
-                    dir_x = raw_ax
-                    dir_y = raw_ay
-                    length = math.hypot(dir_x, dir_y)
-                    if length == 0:
-                        length = 1.0
-                    dx = dir_x / length
-                    dy = dir_y / length
-                    b = Bullet(player.rect.centerx + player.gun_offset[0] - player.w//2,
-                               player.rect.centery + player.gun_offset[1] - player.h//2,
-                               (dx, dy), image=None)
-                    if b:
-                        bullets_list.append(b)
-                    player.aim = (1 if dx > 0.2 else (-1 if dx < -0.2 else 0),
-                                  1 if dy > 0.2 else (-1 if dy < -0.2 else 0))
-                    return
+        # NOTE: we intentionally DO NOT treat a generic button (e.g. B) as "fire".
+        # Firing is handled by the trigger axis (RT) in poll_joysticks.
 
-            hat_idx = pad_map.get("dpad_hat", 0)
-            if joy is not None and joy.get_numhats() > hat_idx:
-                hat = joy.get_hat(hat_idx)
-                if hat != (0, 0):
-                    hx, hy = hat
-                    dx = hx
-                    dy = -hy
-                    b = Bullet(player.rect.centerx + player.gun_offset[0] - player.w//2,
-                               player.rect.centery + player.gun_offset[1] - player.h//2,
-                               (dx, dy), image=None)
-                    if b:
-                        bullets_list.append(b)
-                    player.aim = (dx, dy)
-                    return
-
-            dx, dy = player.aim
-            if dx == 0 and dy == 0:
-                dx = 1.0
-            length = math.hypot(dx, dy)
-            if length == 0:
-                length = 1.0
-            b = Bullet(player.rect.centerx + player.gun_offset[0] - player.w//2,
-                       player.rect.centery + player.gun_offset[1] - player.h//2,
-                       (dx/length, dy/length), image=None)
-            if b:
-                bullets_list.append(b)
-            return
+        # dpad fallback when pressing button (optional) - keep as before if you want
+        hat_idx = pad_map.get("dpad_hat", 0)
+        joy = joysticks[joy_physical_index] if (joy_physical_index is not None and joy_physical_index < len(joysticks)) else None
+        if joy is not None and hat_idx is not None and joy.get_numhats() > hat_idx:
+            hat = joy.get_hat(hat_idx)
+            if hat != (0, 0):
+                hx, hy = hat
+                player.aim = (hx, -hy)
+                return
 
     if event.type == pygame.JOYHATMOTION and player_index is not None and player_index < len(players_list):
         hat_x, hat_y = event.value
         players_list[player_index].aim = (hat_x, -hat_y)
 
-def poll_joysticks(players_list):
+def poll_joysticks(players_list, bullets_list):
     for i, joy in enumerate(joysticks):
         player_idx = joystick_to_player_index.get(i, None)
         if player_idx is None or player_idx >= len(players_list):
@@ -641,31 +658,54 @@ def poll_joysticks(players_list):
             dead_ax = raw_ax if abs(raw_ax) >= AXIS_DEADZONE else 0.0
             dead_ay = raw_ay if abs(raw_ay) >= AXIS_DEADZONE else 0.0
             if dead_ax != 0.0 or dead_ay != 0.0:
-                length = math.hypot(dead_ax, dead_ay)
-                if length == 0:
-                    length = 1.0
+                length = math.hypot(dead_ax, dead_ay) or 1.0
                 nx = dead_ax / length
                 ny = dead_ay / length
                 player.aim = (nx, ny)
-                continue
+                # do not continue; we still want to check trigger
+        else:
+            hat_idx = pad_map.get("dpad_hat", None)
+            if hat_idx is not None and joy.get_numhats() > hat_idx:
+                hat = joy.get_hat(hat_idx)
+                if hat != (0, 0):
+                    player.aim = (hat[0], -hat[1])
 
-        hat_idx = pad_map.get("dpad_hat", None)
-        if hat_idx is not None and joy.get_numhats() > hat_idx:
-            hat = joy.get_hat(hat_idx)
-            if hat != (0, 0):
-                player.aim = (hat[0], -hat[1])
-                continue
+        # ---- NEW: trigger (RT) firing ----
+        trigger_ax = pad_map.get("trigger_axis", None)
+        if trigger_ax is not None and trigger_ax < joy.get_numaxes():
+            val = joy.get_axis(trigger_ax)
+            # NOTE: many drivers report RT in [ -1 .. 1 ] (unpressed=-1 pressed=1)
+            # or [0..1]; we consider pressed when value > 0.5
+            if val > 0.5:
+                # create bullet using player's current aim; player.shoot() will respect cooldown and state
+                dx, dy = player.aim
+                if dx == 0 and dy == 0:
+                    dx = 1.0 if player.facing_right else -1.0
+                length = math.hypot(dx, dy) or 1.0
+                b = player.shoot((dx/length, dy/length))
+                if b:
+                    bullets_list.append(b)
 
 # ---------------- Main game loop ----------------
 pygame.init()
-# initialize joysticks and print info
+
+pygame.mixer.init()   # inicializa o sistema de áudio
+
+# caminho do arquivo de música (ajuste se necessário)
+music_path = os.path.join('assets', 'sounds', 'som4.mp3')
+
+# se o arquivo existir, carrega e toca em loop
+if os.path.exists(music_path):
+    pygame.mixer.music.load(music_path)
+    pygame.mixer.music.set_volume(0.5)   # volume entre 0.0 e 1.0
+    pygame.mixer.music.play(-1)          # -1 = loop infinito
+
 joysticks, joystick_instance_ids = init_joysticks()
 
-window = pygame.display.set_mode((1280, 500))
-pygame.display.set_caption('Duelo Boss - Gamepad multi')
+window = pygame.display.set_mode((1920, 1090))
+pygame.display.set_caption('Duelo Boss - Gamepad multi (RT to fire)')
 W, H = window.get_width(), window.get_height()
 
-# fundo opcional
 fundo_image = None
 fundo_path = os.path.join('assets', 'img', 'fundo_boss.png')
 if os.path.exists(fundo_path):
@@ -674,7 +714,6 @@ if os.path.exists(fundo_path):
 
 ground_y = H
 
-# players (use pastas de animação separadas se quiser)
 player1 = Player(W//4, ground_y, H,
                  image_path=os.path.join('assets', 'img', 'astronauta1.png'),
                  anim_root=os.path.join('assets', 'img', 'player1'))
@@ -702,7 +741,6 @@ while game:
     dt = clock.tick(FPS) / 1000.0
 
     for event in pygame.event.get():
-        # joystick events handled (prints help you map)
         if event.type in (pygame.JOYAXISMOTION, pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP, pygame.JOYHATMOTION):
             handle_joystick_event(event, [player1, player2], bullets)
 
@@ -711,45 +749,52 @@ while game:
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 game = False
-            # keyboard jumps
             if event.key == P1_JUMP:
                 player1.try_jump()
             if event.key == P2_JUMP:
                 player2.try_jump()
-            # keyboard fire (immediate on keydown)
-            if event.key in P1_AIMS and not player1.dead:
+            if event.key in P1_AIMS and player1.is_alive():
                 dx, dy = P1_AIMS[event.key]
                 b = player1.shoot((dx, dy))
                 if b:
                     bullets.append(b)
                 player1.aim = (dx, dy)
-            if event.key in P2_AIMS and not player2.dead:
+            if event.key in P2_AIMS and player2.is_alive():
                 dx, dy = P2_AIMS[event.key]
                 b = player2.shoot((dx, dy))
                 if b:
                     bullets.append(b)
                 player2.aim = (dx, dy)
 
-    # continuous keyboard input (movement + aim hold)
     keys = pygame.key.get_pressed()
     player1.handle_input_keyboard(keys, P1_LEFT, P1_RIGHT, P1_LOOK_UP, P1_AIMS)
     player2.handle_input_keyboard(keys, P2_LEFT, P2_RIGHT, P2_LOOK_UP, P2_AIMS)
 
-    # poll joysticks to override keyboard for connected controllers
-    poll_joysticks([player1, player2])
+    # <-- pass bullets list so poll_joysticks can fire using RT -->
+    poll_joysticks([player1, player2], bullets)
 
-    # update entities
     player1.update(dt, W)
     player2.update(dt, W)
     boss.update(dt)
 
-    # boss actions (aims at both players)
-    boss_bullets.extend(boss.try_shoot_hands(player1.rect.center))
-    boss_bullets.extend(boss.try_shoot_hands(player2.rect.center))
-    boss_lasers.extend(boss.try_fire_lasers_per_hand(player1.rect))
-    boss_lasers.extend(boss.try_fire_lasers_per_hand(player2.rect))
+        # --- colisão direta jogador x boss ---
+    boss_rect = pygame.Rect(boss.rect.x, boss.rect.y, boss.w, boss.h)
+    for player in (player1, player2):
+        if player.is_alive() and boss_rect.colliderect(player.rect):
+            player.take_damage(1)
 
-    # update player bullets -> boss collision
+
+    # boss actions -> select alive player centers and fire toward them
+    alive_centers = []
+    if player1.is_alive():
+        alive_centers.append(player1.rect.center)
+    if player2.is_alive():
+        alive_centers.append(player2.rect.center)
+
+    boss_bullets.extend(boss.try_shoot_hands_at_players(alive_centers))
+    boss_lasers.extend(boss.try_fire_lasers())
+
+    # update bullets (players' bullets)
     for b in bullets[:]:
         b.update(dt, W, H)
         boss_draw_y = int(boss.rect.y + getattr(boss, '_y_offset', 0))
@@ -766,10 +811,10 @@ while game:
     for bb in boss_bullets[:]:
         bb.update(dt, W, H)
         if bb.alive:
-            if bb.collides_rect(player1.rect) and not player1.dead:
+            if player1.is_alive() and bb.collides_rect(player1.rect):
                 bb.alive = False
                 player1.take_damage(1)
-            elif bb.collides_rect(player2.rect) and not player2.dead:
+            elif player2.is_alive() and bb.collides_rect(player2.rect):
                 bb.alive = False
                 player2.take_damage(1)
         if not bb.alive:
@@ -779,9 +824,9 @@ while game:
     for laser in boss_lasers[:]:
         laser.update(dt)
         if laser.alive:
-            if laser.collides_rect(player1.rect) and not player1.dead:
+            if player1.is_alive() and laser.collides_rect(player1.rect):
                 player1.take_damage(1)
-            if laser.collides_rect(player2.rect) and not player2.dead:
+            if player2.is_alive() and laser.collides_rect(player2.rect):
                 player2.take_damage(1)
         if not laser.alive:
             boss_lasers.remove(laser)
@@ -799,15 +844,13 @@ while game:
     player1.draw(window)
     player2.draw(window)
 
-    # HUD
     info = f"P1 HP: {player1.health}/{player1.max_health}   P2 HP: {player2.health}/{player2.max_health}   BossHP: {boss.health}"
     text_surf = font.render(info, True, (255, 255, 255))
     window.blit(text_surf, (10, 10))
 
     pygame.display.flip()
 
-    # end game checks
-    if player1.dead and player2.dead:
+    if (not player1.is_alive()) and (not player2.is_alive()):
         big_font = pygame.font.Font(None, 96)
         text = big_font.render("BOTH PLAYERS DIED", True, (220, 20, 20))
         tx = (W - text.get_width()) // 2
@@ -816,4 +859,5 @@ while game:
         pygame.display.flip()
         pygame.time.delay(1500)
         game = False
+
 pygame.quit()
