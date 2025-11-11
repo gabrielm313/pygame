@@ -18,9 +18,6 @@ pygame.display.set_caption('Joguinho')
 
 assets = load_assets()
 
-# depois escale orig_bg para bg_image como mostrei acima
-
-
 bg_path = path.join('assets', 'img', 'fundo_pg.png')
 orig_bg = pygame.image.load(bg_path).convert_alpha()
 
@@ -38,14 +35,7 @@ bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
 
 TAMANHO_DO_AZULEJO = bg_height # dividido pela quantidade de linhas 
 
-
-
 # --- Defina aqui as plataformas manualmente (x, y em pixels do mundo) ---
-# Ex.: (x(px), y(px), largura(px), altura(px))
-# Para achar x,y: abra 'fundo_pg.png' num editor e copie os valores de pixel.
-# --- Defina aqui as plataformas manualmente (x, y em pixels do mundo) ---
-# Ex.: (x(px), y(px), largura(px), altura(px))
-# Para achar x,y: abra 'fundo_pg.png' num editor e copie os valores de pixel.
 platform_rects = [
             
             pygame.Rect(390,353, 1760 , 4),  
@@ -170,9 +160,6 @@ while game:
             if event.key == pygame.K_c:
                 if hasattr(astronauta, "pular"):
                     astronauta.pular()
-            # if event.key == pygame.K_DOWN:
-                # if hasattr(astronauta, "agachar"):
-                #     astronauta.agachar()
             
             # ---------- DISPARO: dispara apenas se SETA estiver pressionada ----------
             # dispara ao apertar qualquer letra, mas só cria bala se setas definirem direção
@@ -183,10 +170,7 @@ while game:
                     dir_x, dir_y = get_shot_direction_from_arrows()
 
                     # se nenhuma seta pressionada, NÃO DISPARA
-                    if dir_x == 0 and dir_y == 0:
-                        # se quiser fallback para facing, substitua por:
-                        # if hasattr(astronauta, "facing"): dir_x = 1 if astronauta.facing == "right" else -1
-                        # else: dir_x = 1
+                    if dir_x == 0 and dir_y == 0:  
                         pass  # não dispara: continua no loop
                     else:
                         last_shot_time = now
@@ -247,7 +231,6 @@ while game:
     # evitar micro-jitter: se estiver bem próximo, zere a diferença
     if abs(target_camera_x - camera_x) < 0.5:
         camera_x = target_camera_x
-    
 
     # Limita câmera aos limites do background
     camera_x = max(0, min(camera_x, max_camera_x))
@@ -268,11 +251,9 @@ while game:
         draw_y = sprite.rect.y
         window.blit(sprite.image, (draw_x, draw_y))
 
-# <<=== COLOQUE AQUI O LOOP DAS PLATAFORMAS ===>>
+    # <<=== COLOQUE AQUI O LOOP DAS PLATAFORMAS ===>>
     for r in platform_rects:
         screen_rect = pygame.Rect(r.x - int(camera_x), r.y, r.w, r.h)
-        
-
 
     mx, my = pygame.mouse.get_pos()            # coords na tela
     world_x = mx + int(camera_x)               # coords no mundo
@@ -285,9 +266,7 @@ while game:
     font = pygame.font.Font(None, 24)  # reutilize um font global se preferir
     txt = f"Screen: ({mx}, {my})  World: ({world_x}, {world_y})"
     surf = font.render(txt, True, (255,255,255))
-    window.blit(surf, (10, 10))
-
-    
+    window.blit(surf, (10, 10))  
 
     pygame.display.flip()
 
