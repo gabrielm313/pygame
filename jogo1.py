@@ -557,7 +557,7 @@ while game:
                 right_deadzone = (LARGURA * 2) // 3 + 100
             if event.key == pygame.K_LEFT:
                 astronauta.speedx = -7
-            if event.key == pygame.K_RIGHT:s
+            if event.key == pygame.K_RIGHT:
                 astronauta.speedx = 7
             if event.key == pygame.K_c:
                 if hasattr(astronauta, "pular"):
