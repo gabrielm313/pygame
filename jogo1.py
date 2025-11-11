@@ -179,7 +179,7 @@ def show_tutorial_interactive(screen, clock, W, H, image_paths):
                         last_nav_time = now
                     last_axis_dir = dir_now
 
-        # desenha overlay + imagem centralizada
+            # desenha overlay + imagem centralizada
         overlay = pygame.Surface((W, H))
         overlay.fill((8, 8, 12))
         screen.blit(overlay, (0, 0))
@@ -198,7 +198,7 @@ def show_tutorial_interactive(screen, clock, W, H, image_paths):
         screen.blit(left_arrow, (W*0.08 - left_arrow.get_width()/2, H//2 - left_arrow.get_height()/2))
         screen.blit(right_arrow, (W*0.92 - right_arrow.get_width()/2, H//2 - right_arrow.get_height()/2))
 
-        page_text = small_font.render(f"{index+1} / {len(imgs)}   (← → / D-pad / stick)  ESC: fechar", True, (200,200,220))
+        page_text = small_font.render(f"{index+1} / {len(imgs)}   (← → / D-pad / stick)  ESC: fechar", True, (200,200,220))
         screen.blit(page_text, ((W-page_text.get_width())//2, int(H*0.9)))
 
         pygame.display.flip()
@@ -217,8 +217,8 @@ def menu(screen, clock, W, H):
     if os.path.exists(MENU_MUSIC_PATH):
         try:
             pygame.mixer.music.load(MENU_MUSIC_PATH)
-            pygame.mixer.music.set_volume(0.25)   # ajuste de volume (0.0 - 1.0)
-            pygame.mixer.music.play(-1)           # loop infinito enquanto no menu
+            pygame.mixer.music.set_volume(0.25) 
+            pygame.mixer.music.play(-1) 
         except Exception as e:
             print("Erro ao tocar música do menu:", e)
 
@@ -270,14 +270,23 @@ def menu(screen, clock, W, H):
             pass
 
     return start_game
+
 def mostrar_quadrinhos(screen, clock, W, H):
-    """Mostra os quadrinhos em sequência, cada um por 10 segundos."""
+    """
+    Mostra os quadrinhos em sequência, cada um por 15 segundos.
+    Permite pular com ESC, Enter, ou Botão A do controle.
+    """
     quadrinhos = [
         path.join('assets', 'img', 'quadrinho3.png'),
         path.join('assets', 'img', 'quadrinho4.png'),
         path.join('assets', 'img', 'quadrinho5.png')
     ]
-    DURACAO = 10000  # 10 segundos por quadrinho
+    # Duração aumentada para 15 segundos
+    DURACAO = 5000  # 15 segundos por quadrinho
+    
+    # Mapeamento do Botão A (Joystick)
+    BUTTON_A = 0
+    
     imgs = []
 
     # Carrega e ajusta o tamanho das imagens
@@ -300,8 +309,17 @@ def mostrar_quadrinhos(screen, clock, W, H):
                 if ev.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit(0)
-                elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
-                    return
+                
+                # Pular com ESC ou Enter/Return
+                elif ev.type == pygame.KEYDOWN:
+                    if ev.key in (pygame.K_ESCAPE, pygame.K_RETURN):
+                        return # Sai de toda a sequência
+                
+                # Pular com Botão A do Controle
+                elif ev.type == pygame.JOYBUTTONDOWN:
+                    if ev.button == BUTTON_A:
+                        return # Sai de toda a sequência
+                        
             # mostra imagem
             screen.fill((0, 0, 0))
             if img:
@@ -310,13 +328,19 @@ def mostrar_quadrinhos(screen, clock, W, H):
                 screen.blit(img, (ix, iy))
             else:
                 font = pygame.font.Font(None, 48)
-                msg = f"Imagem {i+1} não encontrada"
+                msg = f"Imagem {i+1} não encontrada: {quadrinhos[i]}"
                 t = font.render(msg, True, (255, 255, 255))
                 screen.blit(t, ((W - t.get_width()) // 2, H // 2))
 
+            # Exibe instrução de pular
+            small_font = pygame.font.Font(None, 28)
+            skip_text = small_font.render("Pular: ESC / ENTER / Botão A", True, (200, 200, 220))
+            screen.blit(skip_text, ((W - skip_text.get_width() - 20), int(H * 0.95)))
+
+
             pygame.display.flip()
 
-            # troca após 10 segundos
+            # troca após 15 segundos
             if pygame.time.get_ticks() - start_time >= DURACAO:
                 running = False
 
@@ -328,12 +352,22 @@ if not entrar_menu:
     pygame.quit()
     sys.exit(0)
 
-# --- Toca música do JOGO (som4.mp3) ---
+# =========================================================
+# === NOVO: CHAMA QUADRINHOS AQUI APÓS SAIR DO MENU ===
+# =========================================================
+mostrar_quadrinhos(window, clock, LARGURA, ALTURA)
+
+
+# --- Toca música do JOGO (som5.mp3) ---
 if os.path.exists(GAME_MUSIC_PATH):
     try:
+        # Garante que qualquer música anterior parou/deu fadeout
+        if pygame.mixer.music.get_busy():
+             pygame.mixer.music.stop()
+             
         pygame.mixer.music.load(GAME_MUSIC_PATH)
-        pygame.mixer.music.set_volume(0.20)   # ajuste o volume do jogo aqui
-        pygame.mixer.music.play(-1)           # loop enquanto jogo rodar
+        pygame.mixer.music.set_volume(0.20) 
+        pygame.mixer.music.play(-1) 
     except Exception as e:
         print("Erro ao tocar música do jogo:", e)
 else:
@@ -393,7 +427,7 @@ AXIS_LEFT_Y = 1
 AXIS_RIGHT_X = 2
 AXIS_RIGHT_Y = 3
 AXIS_RT = 5
-BUTTON_A = 0
+BUTTON_A = 0 # Botão A do controle
 
 def get_stick_input(joystick, axis_x, axis_y, deadzone=JOY_DEADZONE):
     if joystick is None:
@@ -624,7 +658,7 @@ while game:
     pygame.draw.circle(window, (255, 0, 0), (mx, my), 4)
 
     font = pygame.font.Font(None, 24)
-    txt = f"Screen: ({mx}, {my})  World: ({world_x}, {world_y})  Cam X: {int(camera_x)}"
+    txt = f"Screen: ({mx}, {my})  World: ({world_x}, {world_y})  Cam X: {int(camera_x)}"
     surf = font.render(txt, True, (255,255,255))
     window.blit(surf, (10, 10))
 
@@ -633,3 +667,4 @@ while game:
 
 # ===== Finalização =====
 pygame.quit()
+sys.exit(0)
