@@ -3,16 +3,26 @@ import math
 from config import LARGURA , ALTURA , GRAVIDADE 
 from assets import ASTRONAUTA_IMG 
 
+# Define estados possíveis do jogador
+STILL = 0
+JUMPING = 1
+FALLING = 2
+
+class Tile(pygame.sprite.Sprite):
+
+    # Construtor da classe.
+    def __init__(self, tile_img, row, column):
+        # Construtor da classe pai (Sprite).
+        pygame.sprite.Sprite.__init__(self)
 
 class Astronauta(pygame.sprite.Sprite):
-    def __init__(self , groups , assets):
+    def __init__(self , groups , assets, row , column, platforms):
         # Construtor da classe mãe (Sprite).
         super().__init__()
         self.groups = groups
         self.assets = assets
 
-        # (x_offset, y_offset) relativo a rect.center
-        self.gun_offset = (20, -15) 
+        
         # offsets da arma (relativos a rect.center)
         self.gun_offset_right = (20, -10)   # ajustar até a bala sair na ponta
         self.gun_offset_left  = (-20, -10)  # normalmente o X invertido da direita
@@ -22,14 +32,27 @@ class Astronauta(pygame.sprite.Sprite):
         self.image = assets[ASTRONAUTA_IMG]
         self.mask = pygame.mask.from_surface(self.image)
         self.rect = self.image.get_rect()
-        self.rect.centerx = LARGURA // 2
-        self.rect.bottom = ALTURA - 40
+
+        #posição inicial do astronauta
+        self.rect.centerx = LARGURA // 2 * column
+        self.rect.bottom = ALTURA - 40 * row
+
+        self.highest_y = self.rect.bottom  # guarda o y mais alto alcançado (inicialmente o chão)
 
         self.speedx = 0
         self.speedy = 0
-        self.no_chao = True  # controla se está no chão
-        # estado de agachar (inicial)
-        self.agachado = False
+        self.on_ground = True  # controla se está no chão
+        self.agachado = False  # estado de agachar (inicial)
+
+        # Guarda os grupos de sprites para tratar as colisões
+        self.platforms = platforms
+
+        # variáveis auxiliares
+        self.state = STILL
+        self.highest_y = self.rect.bottom
+
+        self.drop_through_timer = 0.0       # tempo restante (segundos) em que pode atravessar plataformas
+        self.drop_through_duration = 0.15   # duração curta (0.15s) — ajuste se quiser
 
     def get_gun_tip(self):
         """Retorna (x, y) da ponta da arma em coordenadas do mundo."""
@@ -38,6 +61,7 @@ class Astronauta(pygame.sprite.Sprite):
         ox, oy = getattr(self, "gun_offset", (100, -100))
 
         # se tiver offsets específicos por lado, priorize eles
+
         if hasattr(self, "gun_offset_right") and hasattr(self, "gun_offset_left"):
             if getattr(self, "facing", "right") == "right":
                 ox, oy = self.gun_offset_right 
@@ -50,65 +74,72 @@ class Astronauta(pygame.sprite.Sprite):
         
         return cx + ox, cy + oy
 
-    def update(self , dt=0):
-        # dt = tempo em ms do clock.tick() ou calculado em loop principal
+    def update(self, dt):
+        prev_bottom = self.rect.bottom
 
-         # Movimento horizontal
-        self.rect.x += self.speedx
+        # decrementa timer de "drop through"
+        if self.drop_through_timer > 0:
+            self.drop_through_timer -= dt
+            if self.drop_through_timer <= 0:
+                self.drop_through_timer = 0.0
 
-        # Movimento vertical (pulo e gravidade)
-        self.rect.y += self.speedy
+        # movimento horizontal (mantive sua escala com dt*60)
+        self.rect.x += int(self.speedx * dt * 60)
 
-        # Aplica gravidade
-        if not self.no_chao:
-            self.speedy += GRAVIDADE
+        # se estiver no chão e NÃO estivermos em modo drop_through, verifica se ainda há chão 1px abaixo
+        if self.on_ground and self.drop_through_timer == 0:
+            probe = self.rect.copy()
+            probe.y += 1
+            still_on = False
+            for plat in self.platforms:
+                if probe.colliderect(plat):
+                    still_on = True
+                    break
+            # Verifica também se o "probe" está tocando o chão principal
+            if probe.bottom >= ALTURA - 40:
+                still_on = True
+                
+            if not still_on:
+                self.on_ground = False
+                if self.speedy <= 0:
+                    self.speedy = 1
 
-        if self.speedx > 0:
-            self.facing = "right"
-        elif self.speedx < 0:
-            self.facing = "left"
+        # gravidade e movimento vertical
+        if not self.on_ground:
+            self.speedy += GRAVIDADE * dt * 60
+        self.rect.y += int(self.speedy * dt * 60)
 
-        midbottom = self.rect.midbottom
-        self.rect = self.image.get_rect()
-        self.rect.midbottom = midbottom
-        
-        # Mantém dentro da tela
+        # --- colisão one-way: somente se NÃO estivermos em modo drop_through ---
+        if self.speedy > 0 and self.drop_through_timer == 0:
+            TOL = 6
+            for plat in self.platforms:
+                if self.rect.colliderect(plat):
+                    if prev_bottom <= plat.top + TOL:
+                        self.rect.bottom = plat.top
+                        self.speedy = 0
+                        self.on_ground = True
+                        break
+        else:
+            if self.speedy < 0:
+                self.on_ground = False
 
+        # chão limite
+        if self.rect.bottom >= ALTURA - 40:
+            self.rect.bottom = ALTURA - 40
+            self.speedy = 0
+            self.on_ground = True
+
+        # manter dentro dos limites da tela (esquerda)
         if self.rect.left < 0:
             self.rect.left = 0
 
-        # Limite inferior (chão)
-        if self.rect.bottom >= ALTURA - 40:  # 40 é a margem do chão
-            self.rect.bottom = ALTURA - 40
-            self.speedy = 0
-            self.no_chao = True
-
-        # Limite superior (teto)
-        if self.rect.top <= 0:
-            self.rect.top = 0
-            self.speedy = 0
 
     #adicionando funções para os movimentos do personagem
     def pular(self):
-        if self.no_chao:  # só pula se estiver no chão
-            self.speedy = -82
-            self.no_chao = False
-
-    #aqui(agachar) ainda está dando erro
-    # def agachar(self):
-    #      # já está agachado → não faz nada
-    #     if self.agachado:
-    #         return
-    #     # exemplo simples: trocar a flag e animação
-    #     self.agachado = True
-    #     self.set_state('agachando')
-
-    # def levantar(self):
-    #     if not self.agachado:
-    #         return
-    #     self.agachado = False
-    #     self.set_state('parado')
-
+        if self.on_ground:
+            self.speedy = -92 # ajuste este valor (px/s) para corresponder à sua escala; experimente
+            self.on_ground = False
+            self.state = JUMPING
 
 
 class Bullet(pygame.sprite.Sprite):
@@ -155,25 +186,3 @@ class Bullet(pygame.sprite.Sprite):
         if (self.rect.right < 0 or self.rect.left > self.world_w or
             self.rect.bottom < 0 or self.rect.top > self.world_h):
             self.kill()
-
-
-class Platforma(pygame.sprite.Sprite):
-    def __init__(self, x, y, w, h, image=None):
-        """
-        x, y = coordenadas no MUNDO (top-left)
-        w, h = largura/altura da plataforma
-        image = Surface opcional para desenhar a plataforma
-        """
-        super().__init__()
-        if image:
-            self.image = pygame.transform.scale(image, (w, h))
-        else:
-            # desenho simples para começar
-            self.image = pygame.Surface((w, h), pygame.SRCALPHA)
-            # retângulo cinza com pequena borda
-            pygame.draw.rect(self.image, (120,120,120), (0,0,w,h))
-            pygame.draw.rect(self.image, (80,80,80), (0,0,w,h), 2)
-        self.rect = self.image.get_rect(topleft=(x, y))
-        # mask não é necessário para colisão simples, mas pode ser útil
-        self.mask = pygame.mask.from_surface(self.image)
-

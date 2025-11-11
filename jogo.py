@@ -1,7 +1,7 @@
 import pygame
 import math
-import os
-from config import LARGURA , ALTURA , FPS
+from os import path
+from config import LARGURA , ALTURA , FPS , IMG_DIR
 from assets import load_assets
 import sprites
 
@@ -21,7 +21,7 @@ assets = load_assets()
 # depois escale orig_bg para bg_image como mostrei acima
 
 
-bg_path = os.path.join('assets', 'img', 'fundo_pg.png')
+bg_path = path.join('assets', 'img', 'fundo_pg.png')
 orig_bg = pygame.image.load(bg_path).convert_alpha()
 
 # escala inicial do background com base na ALTURA atual
@@ -36,32 +36,40 @@ def make_bg_for_height(target_height):
 bg_image = make_bg_for_height(ALTURA)
 bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
 
-print("SCREEN:", LARGURA, ALTURA)
-print("BG scaled:", bg_image.get_width(), bg_image.get_height())
-print("camera_x max:", max_camera_x)
+TAMANHO_DO_AZULEJO = bg_height # dividido pela quantidade de linhas 
+
+
+
+# --- Defina aqui as plataformas manualmente (x, y em pixels do mundo) ---
+# Ex.: (x(px), y(px), largura(px), altura(px))
+# Para achar x,y: abra 'fundo_pg.png' num editor e copie os valores de pixel.
+# --- Defina aqui as plataformas manualmente (x, y em pixels do mundo) ---
+# Ex.: (x(px), y(px), largura(px), altura(px))
+# Para achar x,y: abra 'fundo_pg.png' num editor e copie os valores de pixel.
+platform_rects = [
+            
+            pygame.Rect(390,353, 1760 , 4),  
+            pygame.Rect(2322, 520, 1220, 4),
+            pygame.Rect(3750, 360, 1300, 4),
+            pygame.Rect(7640, 360, 1760, 4),
+            pygame.Rect(11590, 360, 1450, 4),
+            pygame.Rect(13200, 530, 910, 4)
+        ]
 
 Astronauta = sprites.Astronauta
 Bullet = sprites.Bullet
-Platforma = sprites.Platforma
-
 
 # Grupos e sprite
 all_sprites = pygame.sprite.Group()
 bullets = pygame.sprite.Group()
-platformas = pygame.sprite.Group()
-
-astronauta = Astronauta(all_sprites, assets)
+platforms = pygame.sprite.Group()
+                                                                                                                                                                                                                      
+astronauta = Astronauta(all_sprites, assets,row = 0 , column = 0, platforms = platform_rects)
 all_sprites.add(astronauta)
 
-# posições em pixels do mundo (x bem maior que LARGURA para aparecer conforme o bg avança)
-p1 = Platforma(300, ALTURA - 150, 200, 20)   # plataforma relativamente próxima
-p2 = Platforma(1200, ALTURA - 220, 250, 20)  # plataforma mais adiante
-p3 = Platforma(2000, ALTURA - 180, 160, 20)  # ainda mais à frente
-platformas.add(p1, p2, p3)
-
-# se quiser que plataformas façam parte de all_sprites (para update/draw automático):
-for p in platformas:
-    all_sprites.add(p)
+# reposiciona para o início (ou centro) do mapa:
+astronauta.rect.centerx = LARGURA // 2
+astronauta.rect.bottom  = ALTURA - 40
 
 # === Camera / scrolling variables ===
 camera_x = 0                               # deslocamento horizontal atual da câmera
@@ -77,6 +85,11 @@ last_shot_time = 0
 # bloqueio de voltar para a região já passada
 LEFT_BACKTRACK_MARGIN = 8
 CAMERA_ONLY_FORWARD = False  # se True, câmera só anda pra frente
+
+#deixa os rects(retângulos de plataforma) transparentes longe
+for r in platform_rects:
+    screen_rect = pygame.Rect(r.x - int(camera_x), r.y, r.w, r.h)
+    pygame.draw.rect(window, (207,181,59), screen_rect)
 
 # helper: direção apenas pelas setas (retorna -1/0/1)
 from pygame import K_LEFT, K_RIGHT, K_UP, K_DOWN
@@ -111,7 +124,7 @@ def reconfigure_display(fullscreen):
         window = pygame.display.set_mode((LARGURA, ALTURA))
 
 
-    # reescala o background usando a imagem originalxxxxxxxxxxxxaxa
+    # reescala o background usando a imagem original
     bg_image = make_bg_for_height(ALTURA)
 
     # atualiza medidas e limite da câmera
@@ -149,15 +162,17 @@ while game:
 
             # Dependendo da tecla, altera a velocidade.
             if event.key == pygame.K_LEFT:
-                astronauta.speedx = -7 
+                    astronauta.speedx = -7
+            
             if event.key == pygame.K_RIGHT:
-               astronauta.speedx = 7 
+                    astronauta.speedx = 7            
+
             if event.key == pygame.K_c:
                 if hasattr(astronauta, "pular"):
                     astronauta.pular()
-            if event.key == pygame.K_DOWN:
-                if hasattr(astronauta, "agachar"):
-                    astronauta.agachar()
+            # if event.key == pygame.K_DOWN:
+                # if hasattr(astronauta, "agachar"):
+                #     astronauta.agachar()
             
             # ---------- DISPARO: dispara apenas se SETA estiver pressionada ----------
             # dispara ao apertar qualquer letra, mas só cria bala se setas definirem direção
@@ -188,44 +203,32 @@ while game:
                         bullets.add(b)
                         all_sprites.add(b)
 
-        # Verxxxifica se soltou alguma tecla.
-        if event.type == pygame.KEYUP:
-            if event.key == pygame.K_LEFT and astronauta.speedx < 0:
-                astronauta.speedx = 0
-            if event.key == pygame.K_RIGHT and astronauta.speedx > 0:
-                astronauta.speedx = 0
             if event.key == pygame.K_DOWN:
-                if hasattr(astronauta, "levantar"):
-                    astronauta.levantar()
-        
+                # se estiver em cima de uma plataforma, deseja "cair" dela:
+                if astronauta.on_ground:
+                    # ativa drop_through por um curtíssimo período e força início da queda
+                    astronauta.drop_through_timer = astronauta.drop_through_duration
+                    astronauta.on_ground = False
+                    # garante uma pequena velocidade para iniciar a queda (evita ficar parado)
+                    if astronauta.speedy <= 0:
+                        astronauta.speedy = 1
+                
+
+        # Verifica se soltou alguma tecla.
+        if event.type == pygame.KEYUP :
+            if event.key == pygame.K_LEFT:
+                astronauta.speedx = 0
+            if event.key == pygame.K_RIGHT:
+                astronauta.speedx = 0
+
         # Tratamento de resize (se usar janela)
         if event.type == pygame.VIDEORESIZE:
             LARGURA, ALTURA = event.w, event.h
             reconfigure_display(fullscreen=False)
 
     # ---- Atualiza os sprites
-    prev_bottom = astronauta.rect.bottom
     all_sprites.update(dt)
     bullets.update(dt)
-
-    # --- antes de atualizar sprites
-prev_bottom = astronauta.rect.bottom
-all_sprites.update(dt)
-bullets.update(dt)
-
-# checagem one-way platforms
-landed_on_platform = False
-for plat in platformas:
-    if astronauta.rect.colliderect(plat.rect):
-        if prev_bottom <= plat.rect.top + 2 and astronauta.speedy >= 0:  # +2 tolerância
-            astronauta.rect.bottom = plat.rect.top
-            astronauta.speedy = 0
-            astronauta.no_chao = True
-            landed_on_platform = True
-            break
-if not landed_on_platform and astronauta.rect.bottom < ALTURA - 40:
-    astronauta.no_chao = False
-
 
     # posição do jogador na tela (em coordenadas do mundo)
     player_screen_x = astronauta.rect.centerx - camera_x  # onde o player aparece na tela
@@ -265,6 +268,26 @@ if not landed_on_platform and astronauta.rect.bottom < ALTURA - 40:
         draw_y = sprite.rect.y
         window.blit(sprite.image, (draw_x, draw_y))
 
+# <<=== COLOQUE AQUI O LOOP DAS PLATAFORMAS ===>>
+    for r in platform_rects:
+        screen_rect = pygame.Rect(r.x - int(camera_x), r.y, r.w, r.h)
+        
+
+
+    mx, my = pygame.mouse.get_pos()            # coords na tela
+    world_x = mx + int(camera_x)               # coords no mundo
+    world_y = my                               
+
+    # desenhar um pequeno marcador na posição do cursor (na tela)
+    pygame.draw.circle(window, (255, 0, 0), (mx, my), 4)
+
+    # escrever texto com as coordenadas
+    font = pygame.font.Font(None, 24)  # reutilize um font global se preferir
+    txt = f"Screen: ({mx}, {my})  World: ({world_x}, {world_y})"
+    surf = font.render(txt, True, (255,255,255))
+    window.blit(surf, (10, 10))
+
+    
 
     pygame.display.flip()
 
