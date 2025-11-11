@@ -7,7 +7,13 @@ from config import LARGURA , ALTURA , FPS , IMG_DIR
 from assets import load_assets
 import sprites
 
+# --------------------------- INICIALIZAÇÃO ---------------------------
 pygame.init()
+# inicializa mixer (para tocar música)
+try:
+    pygame.mixer.init()
+except Exception as e:
+    print("Aviso: pygame.mixer.init() falhou:", e)
 
 # ------------------ CORES / CONFIGURAÇÕES DO MENU ------------------
 # Mude aqui as cores do botão facilmente:
@@ -21,6 +27,10 @@ TUTORIAL_PATHS = [
     path.join('assets', 'img', 'tutorial1.png'),
     path.join('assets', 'img', 'tutorial2.png'),
 ]
+# música do menu
+MENU_MUSIC_PATH = path.join('assets', 'sounds', 'som9.mp3')
+# música do jogo (após menu)
+GAME_MUSIC_PATH = path.join('assets', 'sounds', 'som4.mp3')
 
 # === INICIALIZAÇÃO DOS JOYSTICKS ===
 pygame.joystick.init()
@@ -60,7 +70,11 @@ assets = load_assets()
 bg_path = path.join('assets', 'img', 'fundo_pg.png')
 if not os.path.exists(bg_path):
     print(f"Atenção: fundo não encontrado em {bg_path}")
-orig_bg = pygame.image.load(bg_path).convert_alpha()
+    # evita crash: cria superfície preta
+    orig_bg = pygame.Surface((1920, 1080)).convert_alpha()
+    orig_bg.fill((0, 0, 0))
+else:
+    orig_bg = pygame.image.load(bg_path).convert_alpha()
 
 # escala inicial do background com base na ALTURA atual
 def make_bg_for_height(target_height):
@@ -73,7 +87,7 @@ def make_bg_for_height(target_height):
 bg_image = make_bg_for_height(ALTURA)
 bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
 
-TAMANHO_DO_AZULEJO = bg_height 
+TAMANHO_DO_AZULEJO = bg_height
 
 # ----------------- Funções de UI / Menu / Tutorial -----------------
 
@@ -199,6 +213,15 @@ def menu(screen, clock, W, H):
     btn_play = pygame.Rect((W//2 - btn_w//2, int(H*0.5 - btn_h - 10), btn_w, btn_h))
     btn_tutorial = pygame.Rect((W//2 - btn_w//2, int(H*0.5 + 10), btn_w, btn_h))
 
+    # --- Tocar música do menu (se existir) ---
+    if os.path.exists(MENU_MUSIC_PATH):
+        try:
+            pygame.mixer.music.load(MENU_MUSIC_PATH)
+            pygame.mixer.music.set_volume(0.25)   # ajuste de volume (0.0 - 1.0)
+            pygame.mixer.music.play(-1)           # loop infinito enquanto no menu
+        except Exception as e:
+            print("Erro ao tocar música do menu:", e)
+
     running = True
     start_game = False
     while running:
@@ -237,6 +260,15 @@ def menu(screen, clock, W, H):
         pygame.display.flip()
         clock.tick(60)
 
+    # fadeout suave ao sair do menu (500 ms)
+    try:
+        pygame.mixer.music.fadeout(500)
+    except Exception:
+        try:
+            pygame.mixer.music.stop()
+        except:
+            pass
+
     return start_game
 
 # ----------------- FIM MENU / INICIO DO JOGO -----------------
@@ -246,6 +278,17 @@ entrar_menu = menu(window, clock, LARGURA, ALTURA)
 if not entrar_menu:
     pygame.quit()
     sys.exit(0)
+
+# --- Toca música do JOGO (som4.mp3) ---
+if os.path.exists(GAME_MUSIC_PATH):
+    try:
+        pygame.mixer.music.load(GAME_MUSIC_PATH)
+        pygame.mixer.music.set_volume(0.20)   # ajuste o volume do jogo aqui
+        pygame.mixer.music.play(-1)           # loop enquanto jogo rodar
+    except Exception as e:
+        print("Erro ao tocar música do jogo:", e)
+else:
+    print(f"Atenção: música do jogo não encontrada em {GAME_MUSIC_PATH}")
 
 # --- Defina aqui as plataformas manualmente (x, y em pixels do mundo) ---
 platform_rects = [
