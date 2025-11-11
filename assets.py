@@ -4,9 +4,9 @@ from config import IMG_DIR , PLAYER_LARG , PLAYER_ALTU
 
 ASTRONAUTA_IMG = 'astronauta1'
 FUNDO_IMG = 'fundo_pg'
-ALIEN_IMG = 'alien_img'
-OVNI_IMG = 'ovni_img'
-ENEMY_LASER_IMG = 'enemy_laser_img'
+ALIEN_IMG = 'et'
+OVNI_IMG = 'nave alienigena'
+ENEMY_LASER_IMG = 'laser'
 
 def load_assets():
     assets = {}
@@ -14,6 +14,10 @@ def load_assets():
     #para adicionar a imagem do player foi utilizado chatgpt
     ast_path = os.path.join(IMG_DIR, 'astronauta1.png') 
     astronauta1= pygame.image.load(ast_path).convert_alpha()
+
+    assets[ALIEN_IMG] = pygame.image.load(os.path.join(IMG_DIR, 'et.png')).convert_alpha()
+    assets[OVNI_IMG] = pygame.image.load(os.path.join(IMG_DIR, 'nave alienigena.png')).convert_alpha()
+    assets[ENEMY_LASER_IMG] = pygame.image.load(os.path.join(IMG_DIR, 'laser.jpg')).convert_alpha()
 
     fundo_path = os.path.join(IMG_DIR, 'fundo_pg.png') 
     fundo_pygame= pygame.image.load(fundo_path)
