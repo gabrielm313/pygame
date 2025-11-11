@@ -1,919 +1,543 @@
 import pygame
-import os
 import math
+from os import path
+import os
 import sys
-import subprocess
-from typing import Tuple, List, Optional
+from config import LARGURA , ALTURA , FPS , IMG_DIR
+from assets import load_assets
+import sprites
 
-# ---------------- Utilidade: carregar frames de uma pasta ----------------
-def load_frames_from_folder(folder: str, keep_alpha=True) -> List[pygame.Surface]:
-    frames = []
-    if not folder or not os.path.exists(folder):
-        return frames
-    names = sorted(os.listdir(folder))
-    for n in names:
-        fp = os.path.join(folder, n)
-        if os.path.isfile(fp):
-            img = pygame.image.load(fp)
-            img = img.convert_alpha() if keep_alpha else img.convert()
-            frames.append(img)
-    return frames
+pygame.init()
 
-# ---------------- Player (animação legs+torso/full) ----------------
-class Player:
-    def __init__(self, x, ground_y, screen_height,
-                 image_path=None, scale_height_ratio=0.3,
-                 anim_root='assets/img/player'):
-        self.ground_y = ground_y
-        self.screen_height = screen_height
-        self.image = None
-        if image_path and os.path.exists(image_path):
-            img = pygame.image.load(image_path).convert_alpha()
-            target_h = int(screen_height * scale_height_ratio)
-            scale = target_h / img.get_height()
-            self.image = pygame.transform.rotozoom(img, 0, scale)
-        self.w = self.image.get_width() if self.image else 64
-        self.h = self.image.get_height() if self.image else 128
-        self.rect = pygame.Rect(x, ground_y - self.h, self.w, self.h)
+# ------------------ CORES / CONFIGURAÇÕES DO MENU ------------------
+# Mude aqui as cores do botão facilmente:
+BUTTON_BG = (120, 40, 40)
+BUTTON_HOVER_BG = (70, 70, 120)
+BUTTON_BORDER = (255, 255, 255)
+BUTTON_TEXT = (245, 245, 245)
 
-        # física
-        self.vel_x = 0.0
-        self.vel_y = 0.0
-        self.SPEED = 700.0
-        self.JUMP_VELOCITY = -1500.0
-        self.GRAVITY = 3000.0
-        self.grounded = True
-
-        # tiro
-        self.fire_cooldown = 0.25
-        self._time_since_last_shot = 0.0
-        self.gun_offset = (self.w // 2, self.h // 2)
-
-        self.shot_sound = None
-        shot_path = os.path.join('assets', 'sounds', 'som6.mp3')
-        if os.path.exists(shot_path):
-            self.shot_sound = pygame.mixer.Sound(shot_path)
-            self.shot_sound.set_volume(0.2 )
-
-        # vida / invuln / morte
-        self.max_health = 5
-        self.health = self.max_health
-        self.invuln_time = 0.8
-        self._invuln_timer = 0.0
-        self.dead = False
-
-        # animação
-        self.anim_root = anim_root
-        self.legs_walk = load_frames_from_folder(os.path.join(anim_root, 'legs', 'walk'))
-        self.legs_idle = load_frames_from_folder(os.path.join(anim_root, 'legs', 'idle'))
-        self.torso_anims = {
-            'neutral': load_frames_from_folder(os.path.join(anim_root, 'torso', 'neutral')),
-            'up': load_frames_from_folder(os.path.join(anim_root, 'torso', 'up')),
-            'down': load_frames_from_folder(os.path.join(anim_root, 'torso', 'down')),
-            'upleft': load_frames_from_folder(os.path.join(anim_root, 'torso', 'upleft')),
-            'upright': load_frames_from_folder(os.path.join(anim_root, 'torso', 'upright')),
-            'downleft': load_frames_from_folder(os.path.join(anim_root, 'torso', 'downleft')),
-            'downright': load_frames_from_folder(os.path.join(anim_root, 'torso', 'downright')),
-        }
-        self.full_jump = load_frames_from_folder(os.path.join(anim_root, 'full', 'jump'))
-        self.full_crouch = load_frames_from_folder(os.path.join(anim_root, 'full', 'crouch'))
-
-        self.legs_index = 0
-        self.torso_index = 0
-        self.legs_timer = 0.0
-        self.torso_timer = 0.0
-        self.legs_fps = 12.0
-        self.torso_fps = 12.0
-        self.state = 'idle'
-        self.facing_right = True
-        self.aim = (1, 0)
-
-        self._apply_anim_dims()
-
-    def _apply_anim_dims(self):
-        src = None
-        if self.torso_anims.get('neutral'):
-            lst = self.torso_anims['neutral']
-            if lst:
-                src = lst[0]
-        if not src and self.image:
-            src = self.image
-        if not src and self.full_jump:
-            src = self.full_jump[0]
-        if src:
-            self.w = src.get_width()
-            self.h = src.get_height()
-            self.rect.w = self.w
-            self.rect.h = self.h
-            self.rect.y = self.ground_y - self.h
-
-    def handle_input_keyboard(self, keys, left_key, right_key, look_up_key, aim_keys):
-        if self.dead:
-            self.vel_x = 0.0
-            return
-        vx = 0.0
-        if keys[left_key]:
-            vx = -self.SPEED
-        if keys[right_key]:
-            vx = self.SPEED
-        self.vel_x = vx
-        if self.vel_x > 0:
-            self.facing_right = True
-        elif self.vel_x < 0:
-            self.facing_right = False
-
-        if look_up_key and keys[look_up_key]:
-            self.aim = (0, -1)
-        else:
-            ax = 0; ay = 0
-            for k, vec in aim_keys.items():
-                if keys[k]:
-                    ax += vec[0]
-                    ay += vec[1]
-            if ax != 0 or ay != 0:
-                ax = max(-1, min(1, ax))
-                ay = max(-1, min(1, ay))
-                self.aim = (ax, ay)
-
-    def try_jump(self):
-        if self.dead:
-            return
-        if self.grounded:
-            self.vel_y = self.JUMP_VELOCITY
-            self.grounded = False
-
-    def update(self, dt, screen_width):
-        if self.dead:
-            return
-        self._time_since_last_shot += dt
-        if self._invuln_timer > 0:
-            self._invuln_timer -= dt
-            if self._invuln_timer < 0:
-                self._invuln_timer = 0.0
-
-        self.rect.x += int(self.vel_x * dt)
-        if self.rect.left < 0:
-            self.rect.left = 0
-        if self.rect.right > screen_width:
-            self.rect.right = screen_width
-        self.vel_y += self.GRAVITY * dt
-        self.rect.y += int(self.vel_y * dt)
-        if self.rect.bottom >= self.ground_y:
-            self.rect.bottom = self.ground_y
-            self.vel_y = 0.0
-            self.grounded = True
-        else:
-            self.grounded = False
-
-        if not self.grounded:
-            self.state = 'jump'
-        else:
-            if abs(self.vel_x) > 1:
-                self.state = 'walk'
-            else:
-                self.state = 'idle'
-
-        self._update_legs_anim(dt)
-        self._update_torso_anim(dt)
-
-    def _update_legs_anim(self, dt):
-        if self.state == 'walk' and self.legs_walk:
-            self.legs_timer += dt
-            frame_dur = 1.0 / self.legs_fps
-            while self.legs_timer >= frame_dur:
-                self.legs_timer -= frame_dur
-                self.legs_index = (self.legs_index + 1) % len(self.legs_walk)
-        else:
-            self.legs_index = 0
-            self.legs_timer = 0.0
-
-    def _choose_torso_key(self):
-        ax, ay = self.aim
-        if not self.grounded:
-            if ay < 0:
-                return 'up'
-            if ay > 0:
-                return 'down'
-            return 'neutral'
-        if ax == 0 and ay == 0:
-            return 'neutral'
-        if ay < 0:
-            return 'up' if ax == 0 else ('upleft' if ax < 0 else 'upright')
-        if ay > 0:
-            return 'down' if ax == 0 else ('downleft' if ax < 0 else 'downright')
-        return 'neutral'
-
-    def _update_torso_anim(self, dt):
-        key = self._choose_torso_key()
-        frames = self.torso_anims.get(key, [])
-        if not frames:
-            frames = self.torso_anims.get('neutral', [])
-        if frames:
-            self.torso_timer += dt
-            frame_dur = 1.0 / self.torso_fps
-            while self.torso_timer >= frame_dur:
-                self.torso_timer -= frame_dur
-                self.torso_index = (self.torso_index + 1) % len(frames)
-        else:
-            self.torso_index = 0
-            self.torso_timer = 0.0
-
-    def can_shoot(self) -> bool:
-        return (not self.dead) and (self._time_since_last_shot >= self.fire_cooldown)
-
-    def shoot(self, direction: Tuple[float, float], bullet_image=None) -> Optional["Bullet"]:
-        """
-        Cria e retorna uma Bullet com owner=self.
-        Retorna None se não puder atirar.
-        """
-        if not self.can_shoot():
-            return None
-        self._time_since_last_shot = 0.0
-        spawn_x = self.rect.centerx + self.gun_offset[0] - self.w // 2
-        spawn_y = self.rect.centery + self.gun_offset[1] - self.h // 2
-        b = Bullet(spawn_x, spawn_y, direction, image=bullet_image, owner=self)
-
-        if self.shot_sound:
-            self.shot_sound.play()
-
-        return b
-
-    def take_damage(self, amount: int):
-        if self._invuln_timer > 0.0 or self.dead:
-            return False
-        self.health -= amount
-        self._invuln_timer = self.invuln_time
-        print(f"Player hit! HP: {self.health}/{self.max_health}")
-        if self.health <= 0:
-            self.die()
-        return True
-
-    def die(self):
-        if self.dead:
-            return
-        self.dead = True
-        print("Player morreu!")
-
-    def is_alive(self) -> bool:
-        return (self.health > 0) and (not self.dead)
-
-    def draw(self, surface):
-        if self.dead:
-            return
-
-        # --- desenho do player (jump/full ou legs+torso) ---
-        if self.state == 'jump' and self.full_jump:
-            frame = self.full_jump[0]
-            frame_to_draw = frame
-            if not self.facing_right:
-                frame_to_draw = pygame.transform.flip(frame, True, False)
-            surface.blit(frame_to_draw, (self.rect.x, self.rect.y))
-        else:
-            legs_frames = self.legs_walk if (self.state == 'walk' and self.legs_walk) else (self.legs_idle if self.legs_idle else [])
-            if legs_frames:
-                leg_frame = legs_frames[self.legs_index % len(legs_frames)]
-                if not self.facing_right:
-                    leg_frame = pygame.transform.flip(leg_frame, True, False)
-                surface.blit(leg_frame, (self.rect.x, self.rect.y))
-
-            key = self._choose_torso_key()
-            torso_frames = self.torso_anims.get(key) or self.torso_anims.get('neutral') or []
-            if torso_frames:
-                torso_frame = torso_frames[self.torso_index % len(torso_frames)]
-                if not self.facing_right:
-                    torso_frame = pygame.transform.flip(torso_frame, True, False)
-                surface.blit(torso_frame, (self.rect.x, self.rect.y))
-            else:
-                if self.image:
-                    frame = self.image
-                    if not self.facing_right:
-                        frame = pygame.transform.flip(frame, True, False)
-                    surface.blit(frame, (self.rect.x, self.rect.y))
-                else:
-                    pygame.draw.rect(surface, (200, 30, 30), self.rect)
-
-        # --- barra de vida azul acima da cabeça ---
-        bar_w = max(40, self.w)
-        bar_h = 8
-        bar_x = self.rect.x
-        bar_y = self.rect.y - (bar_h + 6)
-
-        bg_rect = pygame.Rect(bar_x, bar_y, bar_w, bar_h)
-        pygame.draw.rect(surface, (30, 30, 50), bg_rect)
-
-        hp_ratio = max(0.0, min(1.0, float(self.health) / float(self.max_health)))
-        fill_w = int(bar_w * hp_ratio)
-        fill_rect = pygame.Rect(bar_x, bar_y, fill_w, bar_h)
-
-        if hasattr(self, "_invuln_timer") and self._invuln_timer > 0.0:
-            if (pygame.time.get_ticks() // 120) % 2 == 0:
-                fill_color = (120, 180, 255)
-            else:
-                fill_color = (80, 130, 220)
-        else:
-            fill_color = (40, 140, 255)
-
-        if fill_w > 0:
-            pygame.draw.rect(surface, fill_color, fill_rect)
-
-        pygame.draw.rect(surface, (200, 200, 220), bg_rect, 1)
-
-# ---------------- Bullet (com owner) ----------------
-class Bullet:
-    SPEED = 900.0
-    RADIUS = 6
-    COLOR = (255, 220, 0)
-    LIFETIME = 3.5
-
-    def __init__(self, x, y, direction: Tuple[float, float], image: pygame.Surface = None, owner: Optional[object] = None):
-        self.x = float(x)
-        self.y = float(y)
-        dx, dy = direction
-        if dx == 0 and dy == 0:
-            dx = 1.0
-        length = math.hypot(dx, dy) or 1.0
-        self.dir_x = dx / length
-        self.dir_y = dy / length
-        self.speed = Bullet.SPEED
-        self.radius = Bullet.RADIUS
-        self.life = Bullet.LIFETIME
-        self.alive = True
-        self.image = image
-        self.owner = owner
-
-        # <<< CHANGED: color by owner and tint image if needed
-        def tint_image(src_surf: pygame.Surface, color: Tuple[int,int,int]) -> pygame.Surface:
-            """Return a color-tinted copy of src_surf. Keeps alpha."""
-            surf = src_surf.copy().convert_alpha()
-            # create fill surface and multiply
-            fill = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
-            fill.fill((color[0], color[1], color[2], 0))
-            surf.blit(fill, (0,0), special_flags=pygame.BLEND_RGBA_MULT)
-            return surf
-
-        # choose color: boss = red, players = pink
-        boss_color = (0, 255, 10)
-        player_pink = (255, 105, 180)
-
-        if self.image:
-            # if owner is 'boss' or owner has attribute identifying boss, tint accordingly
-            if owner == 'boss':
-                self.image = tint_image(self.image, boss_color)
-                self.color = boss_color
-            else:
-                # owner is player object or None -> pink for players
-                self.image = tint_image(self.image, player_pink)
-                self.color = player_pink
-        else:
-            # no image: set color for drawing circle
-            if owner == 'boss':
-                self.color = boss_color
-            else:
-                self.color = player_pink
-
-    def update(self, dt, screen_w, screen_h):
-        self.x += self.dir_x * self.speed * dt
-        self.y += self.dir_y * self.speed * dt
-        self.life -= dt
-        if self.life <= 0:
-            self.alive = False
-        if self.x < -50 or self.x > screen_w + 50 or self.y < -50 or self.y > screen_h + 50:
-            self.alive = False
-
-    def draw(self, surface):
-        if self.image:
-            rect = self.image.get_rect(center=(int(self.x), int(self.y)))
-            surface.blit(self.image, rect)
-        else:
-            pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
-
-    def collides_rect(self, rect) -> bool:
-        closest_x = max(rect.left, min(int(self.x), rect.right))
-        closest_y = max(rect.top, min(int(self.y), rect.bottom))
-        dx = int(self.x) - closest_x
-        dy = int(self.y) - closest_y
-        return (dx*dx + dy*dy) <= (self.radius * self.radius)
-
-# ---------------- BossLaser ----------------
-class BossLaser:
-    def __init__(self, boss_ref, offset_x, width, height, duration=1.0, damage_per_second=2.0):
-        self.boss = boss_ref
-        self.offset_x = offset_x
-        self.w = width
-        self.h = height
-        self.duration = duration
-        self._time = 0.0
-        self.alive = True
-        self.damage_per_second = damage_per_second
-        self.surface = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
-        self.surface.fill((255, 80, 80, 160))
-
-    def update(self, dt):
-        self._time += dt
-        if self._time >= self.duration:
-            self.alive = False
-
-    def current_rect(self):
-        draw_y = int(self.boss.rect.y + getattr(self.boss, '_y_offset', 0))
-        x = int(self.boss.rect.x + self.offset_x)
-        y = draw_y + self.boss.h
-        return pygame.Rect(x, y, self.w, self.h)
-
-    def draw(self, surface):
-        r = self.current_rect()
-        surface.blit(self.surface, (r.x, r.y))
-
-    def collides_rect(self, rect):
-        return self.current_rect().colliderect(rect)
-
-    def damage_amount_this_frame(self, dt):
-        return self.damage_per_second * dt
-
-# ---------------- Boss ----------------
-class Boss:
-    def __init__(self, x, y, screen_w, screen_h, image_path=None, scale_height_ratio=0.35,
-                 bullet_image_path=None):
-        self.screen_w = screen_w
-        self.screen_h = screen_h
-        self.image = None
-        if image_path and os.path.exists(image_path):
-            img = pygame.image.load(image_path).convert_alpha()
-            target_h = int(screen_h * scale_height_ratio)
-            scale = target_h / img.get_height()
-            self.image = pygame.transform.rotozoom(img, 0, scale)
-        self.w = self.image.get_width() if self.image else 200
-        self.h = self.image.get_height() if self.image else 150
-        self.rect = pygame.Rect(x, y, self.w, self.h)
-        self.speed = 140.0
-        self.direction = 1
-        self.patrol_min_x = 50
-        self.patrol_max_x = screen_w - 50 - self.w
-        self.bob_amplitude = 30.0
-        self.bob_frequency = 0.8
-        self._time = 0.0
-        self.max_health = 60
-        self.health = self.max_health
-
-        self.hand_offsets = [int(self.w * 0.22), int(self.w * 0.78) - 12]
-        self.hand_bullet_cooldowns = [1.2, 1.2]
-        self._time_since_last_bullet = [0.0 for _ in self.hand_offsets]
-        self.hand_laser_cooldowns = [6.0, 6.0]
-        self._time_since_last_laser = [0.0 for _ in self.hand_offsets]
-        self.laser_width = 120
-        self.laser_height = int(screen_h * 0.55)
-        self.laser_duration = 1.2
-        self.laser_damage_per_second = 3.0
-        self.bullet_image = None
-        if bullet_image_path and os.path.exists(bullet_image_path):
-            self.bullet_image = pygame.image.load(bullet_image_path).convert_alpha()
-
-        self.speech_sounds = []
-        speech7 = os.path.join('assets', 'sounds', 'som7.mp3')
-        speech8 = os.path.join('assets', 'sounds', 'som8.mp3')
-        if os.path.exists(speech7):
-            snd7 = pygame.mixer.Sound(speech7)
-            snd7.set_volume(0.3)
-            self.speech_sounds.append(snd7)
-        if os.path.exists(speech8):
-            snd8 = pygame.mixer.Sound(speech8)
-            snd8.set_volume(0.3)
-            self.speech_sounds.append(snd8)
-
-        self.speech_interval_base = 4.0
-        self._speech_timer = 0.0
-        self._speech_index = 0
-
-    def update(self, dt):
-        self._time += dt
-
-        if self.speech_sounds and self.health > 0:
-            self._speech_timer += dt
-            health_ratio = max(0.0, self.health / max(1, self.max_health))
-            current_interval = 10
-            if self._speech_timer >= current_interval:
-                snd = self.speech_sounds[self._speech_index % len(self.speech_sounds)]
-                snd.play()
-                self._speech_index += 1
-                self._speech_timer = 0.0
-
-        for i in range(len(self._time_since_last_bullet)):
-            self._time_since_last_bullet[i] += dt
-        for i in range(len(self._time_since_last_laser)):
-            self._time_since_last_laser[i] += dt
-        self.rect.x += int(self.direction * self.speed * dt)
-        if self.rect.x < self.patrol_min_x:
-            self.rect.x = self.patrol_min_x
-            self.direction = 1
-        elif self.rect.x > self.patrol_max_x:
-            self.rect.x = self.patrol_max_x
-            self.direction = -1
-        self._y_offset = math.sin(2 * math.pi * self.bob_frequency * self._time) * self.bob_amplitude
-
-    def try_shoot_hands_at_players(self, player_centers: List[Tuple[int, int]]):
-        bullets = []
-        if not player_centers:
-            return bullets
-        draw_y = int(self.rect.y + getattr(self, '_y_offset', 0))
-        for i, offset in enumerate(self.hand_offsets):
-            if i >= len(self._time_since_last_bullet):
-                continue
-            if self._time_since_last_bullet[i] < self.hand_bullet_cooldowns[i]:
-                continue
-            spawn_x = int(self.rect.x + offset)
-            spawn_y = draw_y + self.h - 10
-            best = None
-            best_dist = None
-            for c in player_centers:
-                dx = c[0] - spawn_x
-                dy = c[1] - spawn_y
-                d = dx*dx + dy*dy
-                if best is None or d < best_dist:
-                    best = (dx, dy)
-                    best_dist = d
-            if best is None:
-                continue
-            dx, dy = best
-            length = math.hypot(dx, dy) or 1.0
-            b = Bullet(spawn_x, spawn_y, (dx/length, dy/length), image=self.bullet_image, owner='boss')
-            bullets.append(b)
-            self._time_since_last_bullet[i] = 0.0
-        return bullets
-
-    def try_fire_lasers(self):
-        lasers = []
-        for i, offset in enumerate(self.hand_offsets):
-            if i >= len(self._time_since_last_laser):
-                continue
-            if self._time_since_last_laser[i] < self.hand_laser_cooldowns[i]:
-                continue
-            laser = BossLaser(self, offset - (self.laser_width // 2) + 6,
-                              self.laser_width, self.laser_height,
-                              duration=self.laser_duration,
-                              damage_per_second=self.laser_damage_per_second)
-            lasers.append(laser)
-            self._time_since_last_laser[i] = 0.0
-        return lasers
-
-    def draw(self, surface):
-        draw_y = int(self.rect.y + getattr(self, '_y_offset', 0))
-        if self.image:
-            surface.blit(self.image, (self.rect.x, draw_y))
-        pygame.draw.rect(surface, (80, 80, 80),
-                         (self.rect.x, draw_y - 12, self.w, 8))
-        hp_ratio = max(0.0, self.health / self.max_health)
-        pygame.draw.rect(surface, (200, 20, 20),
-                         (self.rect.x, draw_y - 12, int(self.w * hp_ratio), 8))
-
-# ------------------ suporte multi-mapeamento por joystick ------------------
-AXIS_DEADZONE = 0.25
-
-GAMEPAD_MAPS = [
-    {
-        "move_axis_x": 0,
-        "move_axis_y": 1,
-        "aim_axis_x": 2,
-        "aim_axis_y": 3,
-        "dpad_hat": 0,
-        "button_jump": 0,
-        "trigger_axis": 5,
-    },
-    {
-        "move_axis_x": 0,
-        "move_axis_y": 1,
-        "aim_axis_x": 2,
-        "aim_axis_y": 3,
-        "dpad_hat": 0,
-        "button_jump": 0,
-        "trigger_axis": 5,
-    }
+MENU_BG_PATH = path.join('assets', 'img', 'inicio.png')
+TUTORIAL_PATHS = [
+    path.join('assets', 'img', 'tutorial1.png'),
+    path.join('assets', 'img', 'tutorial2.png'),
 ]
 
-joysticks: List[pygame.joystick.Joystick] = []
-joystick_instance_ids: List[int] = []
-joystick_to_player_index = {}
+# === INICIALIZAÇÃO DOS JOYSTICKS ===
+pygame.joystick.init()
+joystick1 = None
+joystick2 = None
 
-def get_map_for_joystick_physical_index(i: int) -> dict:
-    if i is None:
-        return GAMEPAD_MAPS[0]
-    if i < len(GAMEPAD_MAPS):
-        return GAMEPAD_MAPS[i]
-    return GAMEPAD_MAPS[0]
+# Tenta pegar o Joystick 1
+if pygame.joystick.get_count() > 0:
+    joystick1 = pygame.joystick.Joystick(0)
+    joystick1.init()
+    print(f"Controle 1 detectado: {joystick1.get_name()}")
+else:
+    print("Nenhum controle de jogo detectado para o Jogador 1.")
 
-def init_joysticks():
-    global joysticks, joystick_instance_ids, joystick_to_player_index
-    pygame.joystick.init()
-    joysticks = []
-    joystick_instance_ids = []
-    for i in range(pygame.joystick.get_count()):
-        j = pygame.joystick.Joystick(i)
-        j.init()
-        instance_id = j.get_instance_id() if hasattr(j, "get_instance_id") else i
-        joysticks.append(j)
-        joystick_instance_ids.append(instance_id)
-        print(f"Joystick {i}: name='{j.get_name()}' instance_id={instance_id} axes={j.get_numaxes()} buttons={j.get_numbuttons()} hats={j.get_numhats()}")
-    joystick_to_player_index = {i: i for i in range(len(joysticks))}
-    return joysticks, joystick_instance_ids
-
-def read_axis_with_deadzone(joy, axis_idx):
-    if axis_idx is None or axis_idx < 0 or axis_idx >= joy.get_numaxes():
-        return 0.0
-    val = joy.get_axis(axis_idx)
-    if abs(val) < AXIS_DEADZONE:
-        return 0.0
-    return val
-
-def handle_joystick_event(event, players_list, bullets_list):
-    print_event = False
-    if event.type == pygame.JOYAXISMOTION:
-        print_event = True
-    elif event.type == pygame.JOYBUTTONDOWN:
-        print_event = True
-    elif event.type == pygame.JOYBUTTONUP:
-        print_event = True
-    elif event.type == pygame.JOYHATMOTION:
-        print_event = True
-    if print_event:
-        print(event)
-
-    jid = getattr(event, "instance_id", getattr(event, "joy", None))
-    player_index = None
-    joy_physical_index = None
-    if jid is not None:
-        try:
-            joy_physical_index = joystick_instance_ids.index(jid)
-            player_index = joystick_to_player_index.get(joy_physical_index, None)
-        except ValueError:
-            player_index = None
-            joy_physical_index = None
-
-    if event.type == pygame.JOYBUTTONDOWN and player_index is not None and player_index < len(players_list):
-        btn = event.button
-        player = players_list[player_index]
-        pad_map = get_map_for_joystick_physical_index(joy_physical_index)
-
-        if btn == pad_map.get("button_jump"):
-            player.try_jump()
-            return
-
-        hat_idx = pad_map.get("dpad_hat", 0)
-        joy = joysticks[joy_physical_index] if (joy_physical_index is not None and joy_physical_index < len(joysticks)) else None
-        if joy is not None and hat_idx is not None and joy.get_numhats() > hat_idx:
-            hat = joy.get_hat(hat_idx)
-            if hat != (0, 0):
-                hx, hy = hat
-                player.aim = (hx, -hy)
-                return
-
-    if event.type == pygame.JOYHATMOTION and player_index is not None and player_index < len(players_list):
-        hat_x, hat_y = event.value
-        players_list[player_index].aim = (hat_x, -hat_y)
-
-def poll_joysticks(players_list, bullets_list):
-    for i, joy in enumerate(joysticks):
-        player_idx = joystick_to_player_index.get(i, None)
-        if player_idx is None or player_idx >= len(players_list):
-            continue
-        player = players_list[player_idx]
-        pad_map = get_map_for_joystick_physical_index(i)
-
-        move_ax = pad_map.get("move_axis_x", None)
-        if move_ax is not None:
-            ax = read_axis_with_deadzone(joy, move_ax)
-            player.vel_x = ax * player.SPEED
-
-        if player.vel_x > 0:
-            player.facing_right = True
-        elif player.vel_x < 0:
-            player.facing_right = False
-
-        aim_ax = pad_map.get("aim_axis_x", None)
-        aim_ay = pad_map.get("aim_axis_y", None)
-        if aim_ax is not None and aim_ay is not None and joy.get_numaxes() > max(aim_ax, aim_ay):
-            raw_ax = joy.get_axis(aim_ax)
-            raw_ay = joy.get_axis(aim_ay)
-            dead_ax = raw_ax if abs(raw_ax) >= AXIS_DEADZONE else 0.0
-            dead_ay = raw_ay if abs(raw_ay) >= AXIS_DEADZONE else 0.0
-            if dead_ax != 0.0 or dead_ay != 0.0:
-                length = math.hypot(dead_ax, dead_ay) or 1.0
-                nx = dead_ax / length
-                ny = dead_ay / length
-                player.aim = (nx, ny)
-        else:
-            hat_idx = pad_map.get("dpad_hat", None)
-            if hat_idx is not None and joy.get_numhats() > hat_idx:
-                hat = joy.get_hat(hat_idx)
-                if hat != (0, 0):
-                    player.aim = (hat[0], -hat[1])
-
-        trigger_ax = pad_map.get("trigger_axis", None)
-        if trigger_ax is not None and trigger_ax < joy.get_numaxes():
-            val = joy.get_axis(trigger_ax)
-            if val > 0.5:
-                dx, dy = player.aim
-                if dx == 0 and dy == 0:
-                    dx = 1.0 if player.facing_right else -1.0
-                length = math.hypot(dx, dy) or 1.0
-                b = player.shoot((dx/length, dy/length))
-                if b:
-                    bullets_list.append(b)
-
-# ---------------- helper: mostrar imagens e abrir faroeste.py ----------------
-def show_image_for(ms, img_path, screen, clock_ref, W, H):
-    if not os.path.exists(img_path):
-        return
-    img = pygame.image.load(img_path).convert_alpha()
-    img = pygame.transform.smoothscale(img, (W, H))
-    start = pygame.time.get_ticks()
-    while pygame.time.get_ticks() - start < ms:
-        for ev in pygame.event.get():
-            if ev.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit(0)
-        screen.blit(img, (0, 0))
-        pygame.display.flip()
-        clock_ref.tick(60)
-
-def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H, next_script='faroestejogo.py'):
-    # mostra primeira e segunda imagem (2s cada). ajustar ms se quiser.
-    show_image_for(2000, img1_path, screen, clock_ref, W, H)
-    show_image_for(2000, img2_path, screen, clock_ref, W, H)
-
-    # fecha o pygame e inicia o outro script
-    pygame.display.quit()
-    pygame.quit()
-    next_game = os.path.join(os.path.dirname(__file__), next_script)
-    subprocess.Popen([sys.executable, next_game])
-    sys.exit(0)
-
-# ---------------- Main game loop ----------------
-pygame.init()
-pygame.mixer.init()
-
-music_path = os.path.join('assets', 'sounds', 'som4.mp3')
-if os.path.exists(music_path):
-    pygame.mixer.music.load(music_path)
-    pygame.mixer.music.set_volume(0.2)
-    pygame.mixer.music.play(-1)
-
-joysticks, joystick_instance_ids = init_joysticks()
-
-window = pygame.display.set_mode((1920, 1090))
-pygame.display.set_caption('Duelo Boss - Gamepad multi (RT to fire)')
-W, H = window.get_width(), window.get_height()
-
-fundo_image = None
-fundo_path = os.path.join('assets', 'img', 'fundo_boss.png')
-if os.path.exists(fundo_path):
-    fundo_image = pygame.image.load(fundo_path).convert()
-    fundo_image = pygame.transform.smoothscale(fundo_image, (W, H))
-
-ground_y = H
-
-player1 = Player(W//4, ground_y, H,
-                 image_path=os.path.join('assets', 'img', 'astronauta1.png'),
-                 anim_root=os.path.join('assets', 'img', 'player1'))
-
-player2 = Player(3*W//4, ground_y, H,
-                 image_path=os.path.join('assets', 'img', 'astronauta1.png'),
-                 anim_root=os.path.join('assets', 'img', 'player2'))
-
-boss = Boss(W//4, 80, W, H, image_path=os.path.join('assets', 'img', 'nave boss.png'),
-            bullet_image_path=os.path.join('assets', 'img', 'bala.png'))
+# Tenta pegar o Joystick 2 (se houver mais de um)
+if pygame.joystick.get_count() > 1:
+    joystick2 = pygame.joystick.Joystick(1)
+    joystick2.init()
+    print(f"Controle 2 detectado: {joystick2.get_name()}")
+else:
+    print("Apenas um controle (ou nenhum) detectado para o Jogador 2.")
+# =================================
 
 clock = pygame.time.Clock()
-FPS = 60
-font = pygame.font.Font(None, 24)
-bullets, boss_bullets, boss_lasers = [], [], []
+
+# gera a tela principal com tela cheia
+info = pygame.display.Info()
+LARGURA, ALTURA = info.current_w, info.current_h
+window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+
+# Título do jogo na aba
+pygame.display.set_caption('Joguinho')
+
+assets = load_assets()
+
+# --- background original (usado para criar bg escalado) ---
+bg_path = path.join('assets', 'img', 'fundo_pg.png')
+if not os.path.exists(bg_path):
+    print(f"Atenção: fundo não encontrado em {bg_path}")
+orig_bg = pygame.image.load(bg_path).convert_alpha()
+
+# escala inicial do background com base na ALTURA atual
+def make_bg_for_height(target_height):
+    orig_w, orig_h = orig_bg.get_width(), orig_bg.get_height()
+    modificador = target_height / orig_h
+    new_w = int(orig_w * modificador)
+    return pygame.transform.scale(orig_bg, (new_w, target_height))
+
+# decide se vai esticar para a largura da janela ou repetir (tile)
+bg_image = make_bg_for_height(ALTURA)
+bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
+
+TAMANHO_DO_AZULEJO = bg_height 
+
+# ----------------- Funções de UI / Menu / Tutorial -----------------
+
+def load_and_scale(img_path, W, H, keep_aspect=True):
+    """Carrega e escala preservando aspect ratio (centra depois)."""
+    if not os.path.exists(img_path):
+        return None
+    img = pygame.image.load(img_path).convert_alpha()
+    if keep_aspect:
+        iw, ih = img.get_size()
+        scale = min(W/iw, H/ih)
+        return pygame.transform.smoothscale(img, (int(iw*scale), int(ih*scale)))
+    return pygame.transform.smoothscale(img, (W, H))
+
+def draw_button(surface, rect, text, font, hovered=False,
+                bg_color=BUTTON_BG, hover_bg=BUTTON_HOVER_BG,
+                border_color=BUTTON_BORDER, text_color=BUTTON_TEXT):
+    """Desenha botão com borda e texto centralizado. Mude cores nas constantes."""
+    bg_used = hover_bg if hovered else bg_color
+    pygame.draw.rect(surface, bg_used, rect, border_radius=12)
+    pygame.draw.rect(surface, border_color, rect, 2, border_radius=12)
+    txt = font.render(text, True, text_color)
+    tx = rect.x + (rect.w - txt.get_width())//2
+    ty = rect.y + (rect.h - txt.get_height())//2
+    surface.blit(txt, (tx, ty))
+
+def show_tutorial_interactive(screen, clock, W, H, image_paths):
+    """Mostra tutorial paginável - suporta teclado, mouse e gamepad (hat/axis/buttons)."""
+    imgs = [load_and_scale(p, int(W*0.8), int(H*0.75)) for p in image_paths]
+    index = 0
+    running = True
+    small_font = pygame.font.Font(None, 28)
+
+    NAV_COOLDOWN = 0.25
+    last_nav_time = 0.0
+    last_axis_dir = 0
+
+    while running:
+        dt = clock.tick(60) / 1000.0
+        now = pygame.time.get_ticks() / 1000.0
+
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                pygame.quit(); sys.exit(0)
+
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_ESCAPE:
+                    running = False
+                elif ev.key in (pygame.K_RIGHT, pygame.K_d):
+                    index = min(index + 1, len(imgs)-1)
+                elif ev.key in (pygame.K_LEFT, pygame.K_a):
+                    index = max(index - 1, 0)
+
+            if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                mx, my = ev.pos
+                if mx < W*0.2:
+                    index = max(index - 1, 0)
+                elif mx > W*0.8:
+                    index = min(index + 1, len(imgs)-1)
+
+            if ev.type == pygame.JOYHATMOTION:
+                hatx, haty = ev.value
+                if hatx > 0 and now - last_nav_time >= NAV_COOLDOWN:
+                    index = min(index+1, len(imgs)-1); last_nav_time = now
+                elif hatx < 0 and now - last_nav_time >= NAV_COOLDOWN:
+                    index = max(index-1, 0); last_nav_time = now
+
+            if ev.type == pygame.JOYBUTTONDOWN:
+                if now - last_nav_time >= NAV_COOLDOWN:
+                    # ajuste de botões: 0 = próximo, 1 = anterior por padrão
+                    if ev.button == 0:
+                        index = min(index+1, len(imgs)-1); last_nav_time = now
+                    elif ev.button == 1:
+                        index = max(index-1, 0); last_nav_time = now
+                    elif ev.button == 7:
+                        running = False
+
+            if ev.type == pygame.JOYAXISMOTION:
+                axis_idx = getattr(ev, "axis", None)
+                val = getattr(ev, "value", 0.0)
+                AXIS_THRESHOLD = 0.6
+                if axis_idx == 0:
+                    dir_now = 0
+                    if val > AXIS_THRESHOLD: dir_now = 1
+                    elif val < -AXIS_THRESHOLD: dir_now = -1
+                    if dir_now != 0 and dir_now != last_axis_dir and (now - last_nav_time >= NAV_COOLDOWN):
+                        if dir_now > 0: index = min(index+1, len(imgs)-1)
+                        else: index = max(index-1, 0)
+                        last_nav_time = now
+                    last_axis_dir = dir_now
+
+        # desenha overlay + imagem centralizada
+        overlay = pygame.Surface((W, H))
+        overlay.fill((8, 8, 12))
+        screen.blit(overlay, (0, 0))
+
+        img = imgs[index]
+        if img:
+            ix = (W - img.get_width())//2
+            iy = (H - img.get_height())//2
+            screen.blit(img, (ix, iy))
+        else:
+            placeholder = small_font.render(f"Imagem {index+1} ausente: {image_paths[index]}", True, (220,220,220))
+            screen.blit(placeholder, ((W-placeholder.get_width())//2, H//2))
+
+        left_arrow = small_font.render("◀", True, (240,240,240))
+        right_arrow = small_font.render("▶", True, (240,240,240))
+        screen.blit(left_arrow, (W*0.08 - left_arrow.get_width()/2, H//2 - left_arrow.get_height()/2))
+        screen.blit(right_arrow, (W*0.92 - right_arrow.get_width()/2, H//2 - right_arrow.get_height()/2))
+
+        page_text = small_font.render(f"{index+1} / {len(imgs)}   (← → / D-pad / stick)  ESC: fechar", True, (200,200,220))
+        screen.blit(page_text, ((W-page_text.get_width())//2, int(H*0.9)))
+
+        pygame.display.flip()
+
+def menu(screen, clock, W, H):
+    """Tela inicial com JOGAR / TUTORIAL. Retorna True se o jogador escolheu iniciar o jogo."""
+    bg = load_and_scale(MENU_BG_PATH, W, H, keep_aspect=False)
+    title_font = pygame.font.Font(None, 96)
+    btn_font = pygame.font.Font(None, 52)
+
+    btn_w, btn_h = 420, 86
+    btn_play = pygame.Rect((W//2 - btn_w//2, int(H*0.5 - btn_h - 10), btn_w, btn_h))
+    btn_tutorial = pygame.Rect((W//2 - btn_w//2, int(H*0.5 + 10), btn_w, btn_h))
+
+    running = True
+    start_game = False
+    while running:
+        mx, my = pygame.mouse.get_pos()
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                pygame.quit(); sys.exit(0)
+            if ev.type == pygame.KEYDOWN:
+                if ev.key in (pygame.K_RETURN, pygame.K_SPACE):
+                    start_game = True; running = False
+                if ev.key == pygame.K_t:
+                    show_tutorial_interactive(screen, clock, W, H, TUTORIAL_PATHS)
+                if ev.key == pygame.K_ESCAPE:
+                    pygame.quit(); sys.exit(0)
+            if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                if btn_play.collidepoint(ev.pos):
+                    start_game = True; running = False
+                elif btn_tutorial.collidepoint(ev.pos):
+                    show_tutorial_interactive(screen, clock, W, H, TUTORIAL_PATHS)
+            if ev.type == pygame.JOYBUTTONDOWN:
+                # botão 0 = confirmar -> jogar, botão 1 = tutorial
+                if ev.button == 0:
+                    start_game = True; running = False
+                elif ev.button == 1:
+                    show_tutorial_interactive(screen, clock, W, H, TUTORIAL_PATHS)
+
+        # desenha fundo do menu
+        if bg:
+            screen.blit(bg, (0, 0))
+        else:
+            screen.fill((18, 18, 40))
+
+        draw_button(screen, btn_play, "JOGAR", btn_font, hovered=btn_play.collidepoint(mx, my))
+        draw_button(screen, btn_tutorial, "TUTORIAL", btn_font, hovered=btn_tutorial.collidepoint(mx, my))
+
+        pygame.display.flip()
+        clock.tick(60)
+
+    return start_game
+
+# ----------------- FIM MENU / INICIO DO JOGO -----------------
+
+# chama o menu antes de montar o mundo / sprites
+entrar_menu = menu(window, clock, LARGURA, ALTURA)
+if not entrar_menu:
+    pygame.quit()
+    sys.exit(0)
+
+# --- Defina aqui as plataformas manualmente (x, y em pixels do mundo) ---
+platform_rects = [
+    pygame.Rect(390,353, 1760 , 4),
+    pygame.Rect(2322, 520, 1220, 4),
+    pygame.Rect(3750, 360, 1300, 4),
+    pygame.Rect(7640, 360, 1760, 4),
+    pygame.Rect(11590, 360, 1450, 4),
+    pygame.Rect(13200, 530, 910, 4)
+]
+
+Astronauta = sprites.Astronauta
+Bullet = sprites.Bullet
+
+# Grupos e sprite
+all_sprites = pygame.sprite.Group()
+bullets = pygame.sprite.Group()
+platforms = pygame.sprite.Group()
+
+# JOGADOR 1
+astronauta = Astronauta(all_sprites, assets,row = 0 , column = 0, platforms = platform_rects)
+all_sprites.add(astronauta)
+# JOGADOR 2
+astronauta2 = Astronauta(all_sprites, assets,row = 0 , column = 0, platforms = platform_rects)
+all_sprites.add(astronauta2)
+
+# reposiciona para o início (ou centro) do mapa:
+astronauta.rect.centerx = LARGURA // 2 - 50 # Posição inicial levemente diferente
+astronauta.rect.bottom  = ALTURA - 40
+astronauta2.rect.centerx = LARGURA // 2 + 50 # Posição inicial levemente diferente
+astronauta2.rect.bottom  = ALTURA - 40
+
+# === Camera / scrolling variables ===
+camera_x = 0
+camera_speed_smooth = 0.5
+left_deadzone = LARGURA // 3
+right_deadzone = (LARGURA * 2) // 3
+max_camera_x = max(0, bg_width - LARGURA)
+
+# tiro / cooldown
+SHOT_COOLDOWN_MS = 150
+last_shot_time1 = 0
+last_shot_time2 = 0
+
+# bloqueio de voltar para a região já passada
+LEFT_BACKTRACK_MARGIN = 8
+CAMERA_ONLY_FORWARD = False
+
+# === CONSTANTES E FUNÇÕES DO JOYSTICK ===
+JOY_DEADZONE = 0.1
+AXIS_LEFT_X = 0
+AXIS_LEFT_Y = 1
+AXIS_RIGHT_X = 2
+AXIS_RIGHT_Y = 3
+AXIS_RT = 5
+BUTTON_A = 0
+
+def get_stick_input(joystick, axis_x, axis_y, deadzone=JOY_DEADZONE):
+    if joystick is None:
+        return 0, 0
+    dx = joystick.get_axis(axis_x)
+    dy = joystick.get_axis(axis_y)
+    if abs(dx) < deadzone: dx = 0
+    if abs(dy) < deadzone: dy = 0
+    norm_x = 0
+    if dx > 0: norm_x = 1
+    elif dx < 0: norm_x = -1
+    norm_y = 0
+    if dy > 0: norm_y = 1
+    elif dy < 0: norm_y = -1
+    return norm_x, norm_y
+
+from pygame import K_LEFT, K_RIGHT, K_UP, K_DOWN
+
+def get_shot_direction_from_arrows(joystick):
+    keys = pygame.key.get_pressed()
+    dx = 0; dy = 0
+    if joystick == joystick1:
+        if keys[K_RIGHT]: dx += 1
+        if keys[K_LEFT]: dx -= 1
+        if keys[K_DOWN]: dy += 1
+        if keys[K_UP]: dy -= 1
+    if dx != 0 or dy != 0:
+        return dx, dy
+    if joystick is not None:
+        dir_x, dir_y = get_stick_input(joystick, AXIS_RIGHT_X, AXIS_RIGHT_Y)
+        if dir_x != 0 or dir_y != 0:
+            return dir_x, dir_y
+    return 0, 0
+
+def reconfigure_display(fullscreen):
+    global window, LARGURA, ALTURA, left_deadzone, right_deadzone
+    global bg_image, bg_width, bg_height, max_camera_x
+    info = pygame.display.Info()
+    LARGURA, ALTURA = info.current_w, info.current_h
+    if fullscreen:
+        window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    else:
+        window = pygame.display.set_mode((LARGURA, ALTURA))
+    bg_image = make_bg_for_height(ALTURA)
+    bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
+    max_camera_x = max(0, bg_width - LARGURA)
+
+def process_player_input(astronauta, joystick, last_shot_time, dt, is_keyboard_player=False):
+    is_rt_pulled = False
+    joystick_x_dir = 0
+    joystick_y_dir = 0
+    if joystick is not None:
+        joystick_x_dir, joystick_y_dir = get_stick_input(joystick, AXIS_LEFT_X, AXIS_LEFT_Y)
+        rt_value = joystick.get_axis(AXIS_RT) if joystick.get_numaxes() > AXIS_RT else 0
+        if rt_value > 0.5:
+            is_rt_pulled = True
+    keys = pygame.key.get_pressed()
+    if is_keyboard_player:
+        if keys[K_LEFT]:
+            astronauta.speedx = -7
+        elif keys[K_RIGHT]:
+            astronauta.speedx = 7
+        elif joystick_x_dir == 0:
+            astronauta.speedx = 0
+    if joystick_x_dir != 0:
+        astronauta.speedx = joystick_x_dir * 7
+    elif not is_keyboard_player and joystick_x_dir == 0:
+        astronauta.speedx = 0
+    if joystick_y_dir > 0 and astronauta.on_ground:
+        astronauta.drop_through_timer = astronauta.drop_through_duration
+        astronauta.on_ground = False
+        if astronauta.speedy <= 0:
+            astronauta.speedy = 1
+    now = pygame.time.get_ticks()
+    if is_rt_pulled:
+        if now - last_shot_time >= SHOT_COOLDOWN_MS:
+            dir_x, dir_y = get_shot_direction_from_arrows(joystick)
+            if dir_x != 0 or dir_y != 0:
+                last_shot_time = now
+                if hasattr(astronauta, "get_gun_tip"):
+                    gun_x, gun_y = astronauta.get_gun_tip()
+                else:
+                    gun_x, gun_y = astronauta.rect.centerx + 20, astronauta.rect.centery
+                b = Bullet(gun_x, gun_y, dir_x, dir_y,
+                           speed=900, world_w=bg_width, world_h=bg_height)
+                bullets.add(b)
+                all_sprites.add(b)
+    return last_shot_time
+
+# Main loop
+running = True
+fullscreen = True
+
 game = True
-
-P1_LEFT = pygame.K_a; P1_RIGHT = pygame.K_d; P1_LOOK_UP = pygame.K_o; P1_JUMP = pygame.K_w
-P1_AIMS = {pygame.K_i:(0,-1), pygame.K_k:(0,1), pygame.K_j:(-1,0), pygame.K_l:(1,0)}
-P2_LEFT = pygame.K_LEFT; P2_RIGHT = pygame.K_RIGHT; P2_LOOK_UP = pygame.K_RCTRL; P2_JUMP = pygame.K_RSHIFT
-P2_AIMS = {pygame.K_u:(0,-1), pygame.K_m:(0,1), pygame.K_h:(-1,0), pygame.K_k:(1,0)}
-
-# caminhos das imagens de quadrinho (ajuste se necessário)
-img1_path = os.path.join('assets', 'img', 'quadrinho1.png')
-img2_path = os.path.join('assets', 'img', 'quadrinho2.png')
-
 while game:
-    dt = clock.tick(FPS) / 1000.0
-
+    dt_ms = clock.tick(FPS)
+    dt = dt_ms / 1000.0
+    now = pygame.time.get_ticks()
+    j1_shot_by_keyboard = False
     for event in pygame.event.get():
-        if event.type in (pygame.JOYAXISMOTION, pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP, pygame.JOYHATMOTION):
-            handle_joystick_event(event, [player1, player2], bullets)
-
         if event.type == pygame.QUIT:
             game = False
-        elif event.type == pygame.KEYDOWN:
+        if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 game = False
-            if event.key == P1_JUMP:
-                player1.try_jump()
-            if event.key == P2_JUMP:
-                player2.try_jump()
-            if event.key in P1_AIMS and player1.is_alive():
-                dx, dy = P1_AIMS[event.key]
-                b = player1.shoot((dx, dy))
-                if b:
-                    bullets.append(b)
-                player1.aim = (dx, dy)
-            if event.key in P2_AIMS and player2.is_alive():
-                dx, dy = P2_AIMS[event.key]
-                b = player2.shoot((dx, dy))
-                if b:
-                    bullets.append(b)
-                player2.aim = (dx, dy)
+            if event.key == pygame.K_F11:
+                fullscreen = not (pygame.display.get_surface().get_flags() & pygame.FULLSCREEN)
+                reconfigure_display(fullscreen)
+                left_deadzone = LARGURA // 3
+                right_deadzone = (LARGURA * 2) // 3 + 100
+            if event.key == pygame.K_LEFT:
+                astronauta.speedx = -7
+            if event.key == pygame.K_RIGHT:
+                astronauta.speedx = 7
+            if event.key == pygame.K_c:
+                if hasattr(astronauta, "pular"):
+                    astronauta.pular()
+            if event.key == pygame.K_x:
+                if now - last_shot_time1 >= SHOT_COOLDOWN_MS:
+                    j1_shot_by_keyboard = True
+            if event.key == pygame.K_DOWN:
+                if astronauta.on_ground:
+                    astronauta.drop_through_timer = astronauta.drop_through_duration
+                    astronauta.on_ground = False
+                    if astronauta.speedy <= 0:
+                        astronauta.speedy = 1
+        if event.type == pygame.KEYUP :
+            if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT:
+                if joystick1 is None or get_stick_input(joystick1, AXIS_LEFT_X, AXIS_LEFT_Y)[0] == 0:
+                    astronauta.speedx = 0
+        if event.type == pygame.JOYBUTTONDOWN:
+            if event.joy == 0 and event.button == BUTTON_A:
+                if hasattr(astronauta, "pular"):
+                    astronauta.pular()
+            if event.joy == 1 and event.button == BUTTON_A:
+                if hasattr(astronauta2, "pular"):
+                    astronauta2.pular()
+        if event.type == pygame.VIDEORESIZE:
+            LARGURA, ALTURA = event.w, event.h
+            reconfigure_display(fullscreen=False)
 
-    keys = pygame.key.get_pressed()
-    player1.handle_input_keyboard(keys, P1_LEFT, P1_RIGHT, P1_LOOK_UP, P1_AIMS)
-    player2.handle_input_keyboard(keys, P2_LEFT, P2_RIGHT, P2_LOOK_UP, P2_AIMS)
+    # PROCESSAMENTO CONTÍNUO DOS JOGADORES
+    j1_rt_pulled = False
+    if joystick1 is not None and joystick1.get_numaxes() > AXIS_RT:
+        if joystick1.get_axis(AXIS_RT) > 0.5:
+            j1_rt_pulled = True
+    if j1_shot_by_keyboard:
+        j1_rt_pulled = True
 
-    poll_joysticks([player1, player2], bullets)
+    last_shot_time1 = process_player_input(astronauta, joystick1, last_shot_time1, dt, is_keyboard_player=True)
+    if j1_rt_pulled:
+        if now - last_shot_time1 >= SHOT_COOLDOWN_MS:
+            dir_x, dir_y = get_shot_direction_from_arrows(joystick1)
+            if dir_x != 0 or dir_y != 0:
+                last_shot_time1 = now
+                if hasattr(astronauta, "get_gun_tip"):
+                    gun_x, gun_y = astronauta.get_gun_tip()
+                else:
+                    gun_x, gun_y = astronauta.rect.centerx + 20, astronauta.rect.centery
+                b = Bullet(gun_x, gun_y, dir_x, dir_y, speed=900, world_w=bg_width, world_h=bg_height)
+                bullets.add(b)
+                all_sprites.add(b)
 
-    player1.update(dt, W)
-    player2.update(dt, W)
-    boss.update(dt)
+    j2_rt_pulled = False
+    if joystick2 is not None and joystick2.get_numaxes() > AXIS_RT:
+        if joystick2.get_axis(AXIS_RT) > 0.5:
+            j2_rt_pulled = True
 
-    boss_rect = pygame.Rect(boss.rect.x, boss.rect.y, boss.w, boss.h)
-    for player in (player1, player2):
-        if player.is_alive() and boss_rect.colliderect(player.rect):
-            player.take_damage(1)
+    last_shot_time2 = process_player_input(astronauta2, joystick2, last_shot_time2, dt, is_keyboard_player=False)
+    if j2_rt_pulled:
+        if now - last_shot_time2 >= SHOT_COOLDOWN_MS:
+            dir_x, dir_y = get_shot_direction_from_arrows(joystick2)
+            if dir_x != 0 or dir_y != 0:
+                last_shot_time2 = now
+                if hasattr(astronauta2, "get_gun_tip"):
+                    gun_x, gun_y = astronauta2.get_gun_tip()
+                else:
+                    gun_x, gun_y = astronauta2.rect.centerx + 20, astronauta2.rect.centery
+                b = Bullet(gun_x, gun_y, dir_x, dir_y, speed=900, world_w=bg_width, world_h=bg_height)
+                bullets.add(b)
+                all_sprites.add(b)
 
-    alive_centers = []
-    if player1.is_alive():
-        alive_centers.append(player1.rect.center)
-    if player2.is_alive():
-        alive_centers.append(player2.rect.center)
+    # ---- Atualiza os sprites
+    all_sprites.update(dt)
+    bullets.update(dt)
 
-    boss_bullets.extend(boss.try_shoot_hands_at_players(alive_centers))
-    boss_lasers.extend(boss.try_fire_lasers())
-
-    # update bullets (players' bullets)
-    for b in bullets[:]:
-        b.update(dt, W, H)
-        boss_draw_y = int(boss.rect.y + getattr(boss, '_y_offset', 0))
-        boss_rect_draw = pygame.Rect(boss.rect.x, boss_draw_y, boss.w, boss.h)
-        if b.alive and b.collides_rect(boss_rect_draw):
-            b.alive = False
-            boss.health -= 1
-            if boss.health <= 0:
-                print("Boss derrotado!")
-                # mostra as imagens e inicia faroeste.py
-                show_images_and_launch_next(img1_path, img2_path, window, clock, W, H, next_script='faroestejogo.py')
-        if not b.alive:
-            bullets.remove(b)
-
-    # update boss bullets -> players collision
-    for bb in boss_bullets[:]:
-        bb.update(dt, W, H)
-        if bb.alive:
-            if player1.is_alive() and bb.collides_rect(player1.rect):
-                bb.alive = False
-                player1.take_damage(1)
-            elif player2.is_alive() and bb.collides_rect(player2.rect):
-                bb.alive = False
-                player2.take_damage(1)
-        if not bb.alive:
-            boss_bullets.remove(bb)
-
-    # update lasers
-    for laser in boss_lasers[:]:
-        laser.update(dt)
-        if laser.alive:
-            if player1.is_alive() and laser.collides_rect(player1.rect):
-                player1.take_damage(1)
-            if player2.is_alive() and laser.collides_rect(player2.rect):
-                player2.take_damage(1)
-        if not laser.alive:
-            boss_lasers.remove(laser)
-
-    # draw
-    if fundo_image:
-        window.blit(fundo_image, (0, 0))
+    # Lógica de Câmera (Focando no Jogador 1)
+    player_screen_x = astronauta.rect.centerx - camera_x
+    if player_screen_x > right_deadzone:
+        target_camera_x = astronauta.rect.centerx - right_deadzone
+    elif player_screen_x < left_deadzone:
+        target_camera_x = astronauta.rect.centerx - left_deadzone
     else:
-        window.fill((20, 20, 40))
+        target_camera_x = camera_x
 
-    boss.draw(window)
-    for laser in boss_lasers: laser.draw(window)
-    for bb in boss_bullets: bb.draw(window)
-    for b in bullets: b.draw(window)
-    player1.draw(window)
-    player2.draw(window)
+    camera_x += (target_camera_x - camera_x) * camera_speed_smooth
+    if abs(target_camera_x - camera_x) < 0.5:
+        camera_x = target_camera_x
+    camera_x = max(0, min(camera_x, max_camera_x))
 
-    info = f"P1 HP: {player1.health}/{player1.max_health}   P2 HP: {player2.health}/{player2.max_health}   BossHP: {boss.health}"
-    text_surf = font.render(info, True, (255, 255, 255))
-    window.blit(text_surf, (10, 10))
+    min_allowed_x = int(camera_x) + LEFT_BACKTRACK_MARGIN
+    if astronauta.rect.left < min_allowed_x:
+        astronauta.rect.left = min_allowed_x
+        if astronauta.speedx < 0:
+            astronauta.speedx = 0
+    if astronauta2.rect.left < min_allowed_x:
+        astronauta2.rect.left = min_allowed_x
+        if astronauta2.speedx < 0:
+            astronauta2.speedx = 0
+
+    window.fill((0, 0, 0))
+    window.blit(bg_image, (-int(camera_x), 0))
+
+    # desenha sprites subtraindo camera_x
+    for sprite in all_sprites:
+        draw_x = sprite.rect.x - int(camera_x)
+        draw_y = sprite.rect.y
+        window.blit(sprite.image, (draw_x, draw_y))
+
+    # Desenha os retângulos de plataforma (debug) - comentado
+    for r in platform_rects:
+        screen_rect = pygame.Rect(r.x - int(camera_x), r.y, r.w, r.h)
+        # pygame.draw.rect(window, (207,181,59, 100), screen_rect, 1)
+
+    mx, my = pygame.mouse.get_pos()
+    world_x = mx + int(camera_x)
+    world_y = my
+    pygame.draw.circle(window, (255, 0, 0), (mx, my), 4)
+
+    font = pygame.font.Font(None, 24)
+    txt = f"Screen: ({mx}, {my})  World: ({world_x}, {world_y})  Cam X: {int(camera_x)}"
+    surf = font.render(txt, True, (255,255,255))
+    window.blit(surf, (10, 10))
 
     pygame.display.flip()
+    pygame.display.update()
 
-    if (not player1.is_alive()) and (not player2.is_alive()):
-        big_font = pygame.font.Font(None, 96)
-        text = big_font.render("BOTH PLAYERS DIED", True, (220, 20, 20))
-        tx = (W - text.get_width()) // 2
-        ty = (H - text.get_height()) // 2
-        window.blit(text, (tx, ty))
-        pygame.display.flip()
-        pygame.time.delay(1500)
-        game = False
-
+# ===== Finalização =====
 pygame.quit()

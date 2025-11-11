@@ -352,7 +352,7 @@ class Bullet:
             return surf
 
         # choose color: boss = red, players = pink
-        boss_color = (0, 255, 20)
+        boss_color = (0, 255, 10)
         player_pink = (255, 105, 180)
 
         if self.image:
@@ -733,42 +733,10 @@ def show_image_for(ms, img_path, screen, clock_ref, W, H):
         pygame.display.flip()
         clock_ref.tick(60)
 
-def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H,
-                                next_script='faroestejogo.py', ms_each=5000, fadeout_ms=1000):
-    # Faz fadeout/stop da música (sem try/except)
-    if pygame.mixer.get_init():
-        if fadeout_ms and fadeout_ms > 0:
-            pygame.mixer.music.fadeout(int(fadeout_ms))
-        else:
-            pygame.mixer.music.stop()
-
-    # mostra a primeira imagem por ms_each ms
-    if os.path.exists(img1_path):
-        img = pygame.image.load(img1_path).convert_alpha()
-        img = pygame.transform.smoothscale(img, (W, H))
-        start = pygame.time.get_ticks()
-        while pygame.time.get_ticks() - start < int(ms_each):
-            for ev in pygame.event.get():
-                if ev.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit(0)
-            screen.blit(img, (0, 0))
-            pygame.display.flip()
-            clock_ref.tick(60)
-
-    # mostra a segunda imagem por ms_each ms
-    if os.path.exists(img2_path):
-        img = pygame.image.load(img2_path).convert_alpha()
-        img = pygame.transform.smoothscale(img, (W, H))
-        start = pygame.time.get_ticks()
-        while pygame.time.get_ticks() - start < int(ms_each):
-            for ev in pygame.event.get():
-                if ev.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit(0)
-            screen.blit(img, (0, 0))
-            pygame.display.flip()
-            clock_ref.tick(60)
+def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H, next_script='faroestejogo.py'):
+    # mostra primeira e segunda imagem (2s cada). ajustar ms se quiser.
+    show_image_for(2000, img1_path, screen, clock_ref, W, H)
+    show_image_for(2000, img2_path, screen, clock_ref, W, H)
 
     # fecha o pygame e inicia o outro script
     pygame.display.quit()
@@ -776,7 +744,6 @@ def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H,
     next_game = os.path.join(os.path.dirname(__file__), next_script)
     subprocess.Popen([sys.executable, next_game])
     sys.exit(0)
-
 
 # ---------------- Main game loop ----------------
 pygame.init()
@@ -891,10 +858,8 @@ while game:
             boss.health -= 1
             if boss.health <= 0:
                 print("Boss derrotado!")
-                # mostra as imagens por 5000ms (5s) cada e faz fadeout de 1000ms (1s)
-                show_images_and_launch_next(img1_path, img2_path, window, clock, W, H,
-                                            next_script='faroestejogo.py', ms_each=10000, fadeout_ms=1000)
-
+                # mostra as imagens e inicia faroeste.py
+                show_images_and_launch_next(img1_path, img2_path, window, clock, W, H, next_script='faroestejogo.py')
         if not b.alive:
             bullets.remove(b)
 
