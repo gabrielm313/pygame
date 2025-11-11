@@ -1,7 +1,7 @@
 import pygame
 import math
 from config import LARGURA , ALTURA , GRAVIDADE 
-from assets import ASTRONAUTA_IMG 
+from assets import ASTRONAUTA_IMG , ALIEN_IMG , OVNI_IMG , ENEMY_LASER_IMG
 
 # Define estados possíveis do jogador
 STILL = 0
@@ -186,3 +186,178 @@ class Bullet(pygame.sprite.Sprite):
         if (self.rect.right < 0 or self.rect.left > self.world_w or
             self.rect.bottom < 0 or self.rect.top > self.world_h):
             self.kill()
+
+class EnemyLaser(pygame.sprite.Sprite):
+    def __init__(self, x, y, dir_x, dir_y, assets, speed=400):
+        super().__init__()
+        self.image = assets[ENEMY_LASER_IMG]
+        self.rect = self.image.get_rect()
+        
+        # Posição inicial (floats para precisão)
+        self.x = float(x)
+        self.y = float(y)
+        self.rect.center = (self.x, self.y)
+        
+        self.speed = speed
+        self.dir_x = dir_x
+        self.dir_y = dir_y
+
+    def update(self, dt):
+        self.x += self.dir_x * self.speed * dt
+        self.y += self.dir_y * self.speed * dt
+        self.rect.center = (int(self.x), int(self.y))
+        
+        # Mata o laser se sair da tela (limites simples)
+        if self.rect.bottom < 0 or self.rect.top > ALTURA:
+            self.kill()
+
+class Alien(pygame.sprite.Sprite):
+    def __init__(self, x, y, assets, patrol_left, patrol_right, player1, player2, all_groups):
+        super().__init__()
+        self.assets = assets
+        self.image = self.assets[ALIEN_IMG]
+        self.rect = self.image.get_rect(midbottom=(x, y))
+        
+        # Referências
+        self.player1 = player1  # <-- MUDOU AQUI
+        self.player2 = player2  # <-- MUDOU AQUI
+        self.all_groups = all_groups # Dicionário com ('all_sprites', 'enemy_lasers')
+
+        # Limites da patrulha (coordenadas do MUNDO)
+        self.patrol_left = patrol_left
+        self.patrol_right = patrol_right
+        
+        self.patrol_speed = 2 # Velocidade da patrulha
+        self.speedx = self.patrol_speed
+
+        # Lógica de tiro
+        self.shoot_cooldown = 2000 # Cooldown em ms (2 segundos)
+        self.last_shot = pygame.time.get_ticks()
+        self.shoot_range = 600 # Distância (em pixels) para começar a atirar
+
+    def get_closest_target(self):
+        """Decide qual jogador está mais perto."""
+        # Calcula a distância (ao quadrado) para o J1
+        dist1_sq = (self.player1.rect.centerx - self.rect.centerx)**2 + (self.player1.rect.centery - self.rect.centery)**2
+        # Calcula a distância (ao quadrado) para o J2
+        dist2_sq = (self.player2.rect.centerx - self.rect.centerx)**2 + (self.player2.rect.centery - self.rect.centery)**2
+        
+        # Retorna o jogador com a menor distância
+        if dist1_sq <= dist2_sq:
+            return self.player1
+        else:
+            return self.player2
+
+    def update(self, dt):
+        # 1. Movimento de Patrulha
+        self.rect.x += self.speedx
+        # ... (lógica de patrulha) ...
+            
+        # 2. Lógica de Tiro
+        now = pygame.time.get_ticks()
+        
+        # --- DECIDE O ALVO ANTES DE ATIRAR ---
+        player_target = self.get_closest_target() # <-- MUDOU AQUI
+        # -------------------------------------
+        
+        # Distância horizontal até o ALVO ESCOLHIDO
+        dist_x = player_target.rect.centerx - self.rect.centerx
+        
+        # Verifica se o alvo está no alcance e o cooldown acabou
+        if abs(dist_x) < self.shoot_range and now - self.last_shot > self.shoot_cooldown:
+            self.last_shot = now
+            
+            # ... (resto do código de tiro, ele usará 'dist_x' do alvo correto) ...
+            dir_x = 1 if dist_x > 0 else -1
+            dir_y = 0 
+            
+            laser = EnemyLaser(self.rect.centerx, self.rect.centery, 
+                               dir_x, dir_y, self.assets)
+            
+            self.all_groups['all_sprites'].add(laser)
+            self.all_groups['enemy_lasers'].add(laser)
+
+class OVNI(pygame.sprite.Sprite):
+    def __init__(self, x, y, assets, patrol_left, patrol_right, player_target, all_groups):
+        super().__init__()
+        self.assets = assets
+        self.image = self.assets[OVNI_IMG]
+        self.rect = self.image.get_rect(center=(x, y))
+        
+        self.player = player_target
+        self.all_groups = all_groups
+
+        # Limites da patrulha (coordenadas do MUNDO)
+        self.patrol_left = patrol_left
+        self.patrol_right = patrol_right
+        
+        self.patrol_speed = 3
+        self.speedx = self.patrol_speed
+        
+        # Lógica de flutuação
+        self.base_y = y
+        self.hover_range = 10 # Flutua 10px para cima e para baixo
+        self.hover_speed = 0.5 
+
+        # Lógica de tiro
+        self.shoot_cooldown = 1500 # 1.5 segundos
+        self.last_shot = pygame.time.get_ticks()
+        self.shoot_range = 400 # Alcance horizontal
+    
+    def get_closest_target(self):
+        """Decide qual jogador está mais perto."""
+        # Calcula a distância (ao quadrado) para o J1
+        dist1_sq = (self.player1.rect.centerx - self.rect.centerx)**2 + (self.player1.rect.centery - self.rect.centery)**2
+        # Calcula a distância (ao quadrado) para o J2
+        dist2_sq = (self.player2.rect.centerx - self.rect.centerx)**2 + (self.player2.rect.centery - self.rect.centery)**2
+        
+        # Retorna o jogador com a menor distância
+        if dist1_sq <= dist2_sq:
+            return self.player1
+        else:
+            return self.player2
+
+    def update(self, dt):
+        # 1. Movimento de Patrulha (Horizontal)
+        self.rect.x += self.speedx
+        
+        if self.rect.right > self.patrol_right:
+            self.speedx = -self.patrol_speed
+        elif self.rect.left < self.patrol_left:
+            self.speedx = self.patrol_speed
+            
+        # 2. Movimento de Flutuação (Vertical)
+        # Usamos seno para criar um movimento suave de "bob"
+        ticks = pygame.time.get_ticks()
+        self.rect.centery = self.base_y + math.sin(ticks * self.hover_speed * dt) * self.hover_range
+
+        # 3. Lógica de Tiro (Só atira para baixo)
+        now = pygame.time.get_ticks()
+        
+        # --- DECIDE O ALVO ANTES DE ATIRAR ---
+        player_target = self.get_closest_target() # Escolhe o alvo mais próximo
+        # -------------------------------------
+        
+        # Distância horizontal do ALVO ESCOLHIDO
+        dist_x = player_target.rect.centerx - self.rect.centerx
+        
+        # Verifica se:
+        # 1. O alvo está no alcance horizontal (abs(dist_x))
+        # 2. O alvo está ABAIXO do OVNI (player_target.rect.top > self.rect.bottom)
+        # 3. O cooldown acabou
+        if (abs(dist_x) < self.shoot_range and 
+            player_target.rect.top > self.rect.bottom and 
+            now - self.last_shot > self.shoot_cooldown):
+            
+            self.last_shot = now
+            
+            # Atira reto para baixo
+            dir_x = 0
+            dir_y = 1 
+            
+            # Cria o laser (saindo de 'midbottom')
+            laser = EnemyLaser(self.rect.midbottom[0], self.rect.midbottom[1], 
+                               dir_x, dir_y, self.assets, speed=500)
+            
+            self.all_groups['all_sprites'].add(laser)
+            self.all_groups['enemy_lasers'].add(laser)

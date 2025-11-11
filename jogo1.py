@@ -302,11 +302,16 @@ platform_rects = [
 
 Astronauta = sprites.Astronauta
 Bullet = sprites.Bullet
+Alien = sprites.Alien
+OVNI = sprites.OVNI
+EnemyLaser = sprites.EnemyLaser
 
 # Grupos e sprite
 all_sprites = pygame.sprite.Group()
 bullets = pygame.sprite.Group()
 platforms = pygame.sprite.Group()
+enemies_group = pygame.sprite.Group()    # Grupo para TODOS os inimigos
+enemy_lasers_group = pygame.sprite.Group() # Grupo para TODOS os lasers inimigos
 
 # JOGADOR 1
 astronauta = Astronauta(all_sprites, assets,row = 0 , column = 0, platforms = platform_rects)
@@ -314,6 +319,50 @@ all_sprites.add(astronauta)
 # JOGADOR 2
 astronauta2 = Astronauta(all_sprites, assets,row = 0 , column = 0, platforms = platform_rects)
 all_sprites.add(astronauta2)
+
+# Dicionário de grupos para passar para os inimigos
+all_groups = {
+    'all_sprites': all_sprites,
+    'enemies': enemies_group,
+    'enemy_lasers': enemy_lasers_group
+}
+
+# --- Lista de Spawns dos Inimigos ---
+# Formato: (tipo, x_spawn, y_spawn, patrol_limit_left, patrol_limit_right)
+ENEMY_SPAWN_DATA = [
+    # Ex: Alien no chão
+    ('alien', 1000, ALTURA - 40, 900, 1300), 
+    
+    # Ex: OVNI no ar
+    ('ovni',  1500, 200, 1400, 1800),
+    
+    # Ex: Alien na segunda plataforma (y=520)
+    ('alien', 2400, 520, 2350, 2600), 
+    
+    # Adicione quantos inimigos quiser, ajustando as coordenadas do mundo
+    ('alien', 4000, 360, 3900, 4200),
+    ('ovni',  4500, 250, 4300, 4800),
+]
+
+# PASSA OS DOIS JOGADORES para os inimigos
+player1 = astronauta
+player2 = astronauta2
+
+# Loop para criar os inimigos
+for data in ENEMY_SPAWN_DATA:
+    e_type, x, y, p_left, p_right = data
+    
+    enemy = None
+    if e_type == 'alien':
+        # Passa player1 E player2
+        enemy = Alien(x, y, assets, p_left, p_right, player1, player2, all_groups) 
+    elif e_type == 'ovni':
+        # Passa player1 E player2
+        enemy = OVNI(x, y, assets, p_left, p_right, player1, player2, all_groups)
+    
+    if enemy:
+        all_sprites.add(enemy)
+        enemies_group.add(enemy)
 
 # reposiciona para o início (ou centro) do mapa:
 astronauta.rect.centerx = LARGURA // 2 - 50 # Posição inicial levemente diferente
