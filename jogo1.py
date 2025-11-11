@@ -30,7 +30,7 @@ TUTORIAL_PATHS = [
 # música do menu
 MENU_MUSIC_PATH = path.join('assets', 'sounds', 'som9.mp3')
 # música do jogo (após menu)
-GAME_MUSIC_PATH = path.join('assets', 'sounds', 'som4.mp3')
+GAME_MUSIC_PATH = path.join('assets', 'sounds', 'som5.mp3')
 
 # === INICIALIZAÇÃO DOS JOYSTICKS ===
 pygame.joystick.init()
@@ -270,6 +270,55 @@ def menu(screen, clock, W, H):
             pass
 
     return start_game
+def mostrar_quadrinhos(screen, clock, W, H):
+    """Mostra os quadrinhos em sequência, cada um por 10 segundos."""
+    quadrinhos = [
+        path.join('assets', 'img', 'quadrinho3.png'),
+        path.join('assets', 'img', 'quadrinho4.png'),
+        path.join('assets', 'img', 'quadrinho5.png')
+    ]
+    DURACAO = 10000  # 10 segundos por quadrinho
+    imgs = []
+
+    # Carrega e ajusta o tamanho das imagens
+    for p in quadrinhos:
+        if os.path.exists(p):
+            img = pygame.image.load(p).convert_alpha()
+            iw, ih = img.get_size()
+            scale = min(W / iw, H / ih)
+            new_img = pygame.transform.smoothscale(img, (int(iw * scale), int(ih * scale)))
+            imgs.append(new_img)
+        else:
+            imgs.append(None)
+
+    for i, img in enumerate(imgs):
+        start_time = pygame.time.get_ticks()
+        running = True
+        while running:
+            dt = clock.tick(60)
+            for ev in pygame.event.get():
+                if ev.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit(0)
+                elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
+                    return
+            # mostra imagem
+            screen.fill((0, 0, 0))
+            if img:
+                ix = (W - img.get_width()) // 2
+                iy = (H - img.get_height()) // 2
+                screen.blit(img, (ix, iy))
+            else:
+                font = pygame.font.Font(None, 48)
+                msg = f"Imagem {i+1} não encontrada"
+                t = font.render(msg, True, (255, 255, 255))
+                screen.blit(t, ((W - t.get_width()) // 2, H // 2))
+
+            pygame.display.flip()
+
+            # troca após 10 segundos
+            if pygame.time.get_ticks() - start_time >= DURACAO:
+                running = False
 
 # ----------------- FIM MENU / INICIO DO JOGO -----------------
 
