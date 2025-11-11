@@ -231,6 +231,15 @@ class Player:
         self._time_since_last_shot = 0.0
         spawn_x = self.rect.centerx + self.gun_offset[0] - self.w // 2
         spawn_y = self.rect.centery + self.gun_offset[1] - self.h // 2
+        
+        # Ajuste o ponto de disparo com base na direção de mira
+        if direction == (0, -1):  # Mirando para cima
+            spawn_x = self.rect.centerx
+            spawn_y = self.rect.top
+        elif direction == (0, 1): # Mirando para baixo
+            spawn_x = self.rect.centerx
+            spawn_y = self.rect.bottom
+
         b = Bullet(spawn_x, spawn_y, direction, image=bullet_image, owner=self)
 
         if self.shot_sound:
@@ -321,7 +330,7 @@ class Player:
 # ---------------- Bullet (com owner) ----------------
 class Bullet:
     SPEED = 900.0
-    RADIUS = 6
+    RADIUS = 10
     COLOR = (255, 220, 0)
     LIFETIME = 3.5
 
@@ -351,7 +360,7 @@ class Bullet:
             surf.blit(fill, (0,0), special_flags=pygame.BLEND_RGBA_MULT)
             return surf
 
-        # choose color: boss = red, players = pink
+        # choose color: boss = green, players = pink
         boss_color = (0, 255, 20)
         player_pink = (255, 105, 180)
 
@@ -623,17 +632,7 @@ def read_axis_with_deadzone(joy, axis_idx):
     return val
 
 def handle_joystick_event(event, players_list, bullets_list):
-    print_event = False
-    if event.type == pygame.JOYAXISMOTION:
-        print_event = True
-    elif event.type == pygame.JOYBUTTONDOWN:
-        print_event = True
-    elif event.type == pygame.JOYBUTTONUP:
-        print_event = True
-    elif event.type == pygame.JOYHATMOTION:
-        print_event = True
-    if print_event:
-        print(event)
+    # Removido o print de eventos para limpar o console
 
     jid = getattr(event, "instance_id", getattr(event, "joy", None))
     player_index = None
@@ -668,7 +667,7 @@ def handle_joystick_event(event, players_list, bullets_list):
         hat_x, hat_y = event.value
         players_list[player_index].aim = (hat_x, -hat_y)
 
-def poll_joysticks(players_list, bullets_list):
+def poll_joysticks(players_list, bullets_list, boss_bullet_image):
     for i, joy in enumerate(joysticks):
         player_idx = joystick_to_player_index.get(i, None)
         if player_idx is None or player_idx >= len(players_list):
@@ -708,12 +707,17 @@ def poll_joysticks(players_list, bullets_list):
         trigger_ax = pad_map.get("trigger_axis", None)
         if trigger_ax is not None and trigger_ax < joy.get_numaxes():
             val = joy.get_axis(trigger_ax)
+            # Gatilho pressionado (valor positivo > 0.5)
             if val > 0.5:
                 dx, dy = player.aim
+                # Se não estiver mirando (aim = (0,0)), atira na direção que o player está virado
                 if dx == 0 and dy == 0:
                     dx = 1.0 if player.facing_right else -1.0
                 length = math.hypot(dx, dy) or 1.0
-                b = player.shoot((dx/length, dy/length))
+                
+                # O Bullet precisa do boss.bullet_image para ser instanciado corretamente,
+                # mas o boss ainda não existe aqui, então é passado como argumento.
+                b = player.shoot((dx/length, dy/length), bullet_image=boss_bullet_image)
                 if b:
                     bullets_list.append(b)
 
@@ -734,7 +738,7 @@ def show_image_for(ms, img_path, screen, clock_ref, W, H):
         clock_ref.tick(60)
 
 def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H,
-                                next_script='faroestejogo.py', ms_each=5000, fadeout_ms=1000):
+                                 next_script='faroestejogo.py', ms_each=5000, fadeout_ms=1000):
     # Faz fadeout/stop da música (sem try/except)
     if pygame.mixer.get_init():
         if fadeout_ms and fadeout_ms > 0:
@@ -742,7 +746,7 @@ def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H,
         else:
             pygame.mixer.music.stop()
 
-    # mostra a primeira imagem por ms_each ms
+    # mostra a primeira imagem por ms_each ms (100% usando ia)
     if os.path.exists(img1_path):
         img = pygame.image.load(img1_path).convert_alpha()
         img = pygame.transform.smoothscale(img, (W, H))
@@ -756,7 +760,7 @@ def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H,
             pygame.display.flip()
             clock_ref.tick(60)
 
-    # mostra a segunda imagem por ms_each ms
+    # mostra a segunda imagem por ms_each ms (feito com chatgpt)
     if os.path.exists(img2_path):
         img = pygame.image.load(img2_path).convert_alpha()
         img = pygame.transform.smoothscale(img, (W, H))
@@ -774,11 +778,18 @@ def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H,
     pygame.display.quit()
     pygame.quit()
     next_game = os.path.join(os.path.dirname(__file__), next_script)
-    subprocess.Popen([sys.executable, next_game])
+    
+    # Verifica se o script existe
+    if os.path.exists(next_game):
+        print(f"Lançando o próximo jogo: {next_game}")
+        subprocess.Popen([sys.executable, next_game])
+    else:
+        print(f"ERRO: Não foi possível encontrar o script: {next_game}")
+
     sys.exit(0)
 
 
-# ---------------- Main game loop ----------------
+# ---------------- Main game loop (feito com chat )----------------
 pygame.init()
 pygame.mixer.init()
 
@@ -818,11 +829,13 @@ FPS = 60
 font = pygame.font.Font(None, 24)
 bullets, boss_bullets, boss_lasers = [], [], []
 game = True
+all_players = [player1, player2]
 
+# Mapeamento de Teclas (P2_AIMS CORRIGIDO)
 P1_LEFT = pygame.K_a; P1_RIGHT = pygame.K_d; P1_LOOK_UP = pygame.K_o; P1_JUMP = pygame.K_w
 P1_AIMS = {pygame.K_i:(0,-1), pygame.K_k:(0,1), pygame.K_j:(-1,0), pygame.K_l:(1,0)}
 P2_LEFT = pygame.K_LEFT; P2_RIGHT = pygame.K_RIGHT; P2_LOOK_UP = pygame.K_RCTRL; P2_JUMP = pygame.K_RSHIFT
-P2_AIMS = {pygame.K_u:(0,-1), pygame.K_m:(0,1), pygame.K_h:(-1,0), pygame.K_k:(1,0)}
+P2_AIMS = {pygame.K_u:(0,-1), pygame.K_m:(0,1), pygame.K_h:(-1,0), pygame.K_l:(1,0)} # << CORRIGIDO: K_l para a direita
 
 # caminhos das imagens de quadrinho (ajuste se necessário)
 img1_path = os.path.join('assets', 'img', 'quadrinho1.png')
@@ -831,120 +844,147 @@ img2_path = os.path.join('assets', 'img', 'quadrinho2.png')
 while game:
     dt = clock.tick(FPS) / 1000.0
 
+    # 1. PROCESSAMENTO DE INPUT
+    keys = pygame.key.get_pressed()
+    
+    # Input do Player 1
+    player1.handle_input_keyboard(keys, P1_LEFT, P1_RIGHT, P1_LOOK_UP, P1_AIMS)
+    # Input do Player 2
+    player2.handle_input_keyboard(keys, P2_LEFT, P2_RIGHT, P2_LOOK_UP, P2_AIMS)
+    
+    # Input do Joystick (Movimento e Mira contínuos)
+    poll_joysticks(all_players, bullets, boss.bullet_image)
+
+    # Eventos (Pulo e Tiro com Teclado)
     for event in pygame.event.get():
         if event.type in (pygame.JOYAXISMOTION, pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP, pygame.JOYHATMOTION):
-            handle_joystick_event(event, [player1, player2], bullets)
+            handle_joystick_event(event, all_players, bullets)
 
         if event.type == pygame.QUIT:
             game = False
+        
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 game = False
+            
+            # Pulo
             if event.key == P1_JUMP:
                 player1.try_jump()
             if event.key == P2_JUMP:
                 player2.try_jump()
-            if event.key in P1_AIMS and player1.is_alive():
-                dx, dy = P1_AIMS[event.key]
-                b = player1.shoot((dx, dy))
+            
+            # TIRO com Teclado (Baseado na mira atualizada pelo handle_input_keyboard)
+            
+            # Player 1
+            if event.key in [pygame.K_RETURN, pygame.K_SPACE]: # Usando ENTER ou SPACE como tecla de fogo
+                dx, dy = player1.aim
+                # Se não houver mira (0,0), atira para frente
+                if dx == 0 and dy == 0:
+                    dx = 1.0 if player1.facing_right else -1.0
+                length = math.hypot(dx, dy) or 1.0
+                b = player1.shoot((dx/length, dy/length), bullet_image=boss.bullet_image)
                 if b:
                     bullets.append(b)
-                player1.aim = (dx, dy)
-            if event.key in P2_AIMS and player2.is_alive():
-                dx, dy = P2_AIMS[event.key]
-                b = player2.shoot((dx, dy))
+
+            # Player 2
+            if event.key == pygame.K_RALT: # Usando ALT direito como tecla de fogo para P2
+                dx, dy = player2.aim
+                if dx == 0 and dy == 0:
+                    dx = 1.0 if player2.facing_right else -1.0
+                length = math.hypot(dx, dy) or 1.0
+                b = player2.shoot((dx/length, dy/length), bullet_image=boss.bullet_image)
                 if b:
                     bullets.append(b)
-                player2.aim = (dx, dy)
 
-    keys = pygame.key.get_pressed()
-    player1.handle_input_keyboard(keys, P1_LEFT, P1_RIGHT, P1_LOOK_UP, P1_AIMS)
-    player2.handle_input_keyboard(keys, P2_LEFT, P2_RIGHT, P2_LOOK_UP, P2_AIMS)
-
-    poll_joysticks([player1, player2], bullets)
-
+    # 2. ATUALIZAÇÕES
     player1.update(dt, W)
     player2.update(dt, W)
     boss.update(dt)
 
-    boss_rect = pygame.Rect(boss.rect.x, boss.rect.y, boss.w, boss.h)
-    for player in (player1, player2):
-        if player.is_alive() and boss_rect.colliderect(player.rect):
-            player.take_damage(1)
-
-    alive_centers = []
-    if player1.is_alive():
-        alive_centers.append(player1.rect.center)
-    if player2.is_alive():
-        alive_centers.append(player2.rect.center)
-
-    boss_bullets.extend(boss.try_shoot_hands_at_players(alive_centers))
+    # Tiro do Boss (Balas)
+    player_centers = [p.rect.center for p in all_players if p.is_alive()]
+    if player_centers:
+        boss_bullets.extend(boss.try_shoot_hands_at_players(player_centers))
+    
+    # Tiro do Boss (Lasers)
     boss_lasers.extend(boss.try_fire_lasers())
 
-    # update bullets (players' bullets)
-    for b in bullets[:]:
+    # Atualiza Balas
+    bullets = [b for b in bullets if b.alive]
+    boss_bullets = [b for b in boss_bullets if b.alive]
+    boss_lasers = [l for l in boss_lasers if l.alive]
+    for b in bullets:
         b.update(dt, W, H)
-        boss_draw_y = int(boss.rect.y + getattr(boss, '_y_offset', 0))
-        boss_rect_draw = pygame.Rect(boss.rect.x, boss_draw_y, boss.w, boss.h)
-        if b.alive and b.collides_rect(boss_rect_draw):
-            b.alive = False
+    for b in boss_bullets:
+        b.update(dt, W, H)
+    for l in boss_lasers:
+        l.update(dt)
+    
+    # 3. COLISÕES
+    # Player Bullets vs Boss
+    for b in bullets[:]:
+        if b.collides_rect(boss.rect):
             boss.health -= 1
-            if boss.health <= 0:
-                print("Boss derrotado!")
-                # mostra as imagens por 5000ms (5s) cada e faz fadeout de 1000ms (1s)
-                show_images_and_launch_next(img1_path, img2_path, window, clock, W, H,
-                                            next_script='faroestejogo.py', ms_each=000, fadeout_ms=1000)
-
-        if not b.alive:
+            b.alive = False
             bullets.remove(b)
+    
+    # Boss Bullets vs Players
+    for b in boss_bullets[:]:
+        for p in all_players:
+            if p.is_alive() and b.collides_rect(p.rect):
+                if p.take_damage(1):
+                    b.alive = False
+                    boss_bullets.remove(b)
+                    break
+    
+    # Boss Lasers vs Players
+    for l in boss_lasers:
+        for p in all_players:
+            if p.is_alive() and l.collides_rect(p.rect):
+                damage = l.damage_amount_this_frame(dt)
+                if p.health > 0:
+                    p.health = max(0, p.health - damage)
+                    if p.health == 0:
+                        p.die()
 
-    # update boss bullets -> players collision
-    for bb in boss_bullets[:]:
-        bb.update(dt, W, H)
-        if bb.alive:
-            if player1.is_alive() and bb.collides_rect(player1.rect):
-                bb.alive = False
-                player1.take_damage(1)
-            elif player2.is_alive() and bb.collides_rect(player2.rect):
-                bb.alive = False
-                player2.take_damage(1)
-        if not bb.alive:
-            boss_bullets.remove(bb)
+    # 4. CHECAGEM DE VITÓRIA/GAMEOVER (Aqui é a correção principal)
+    if boss.health <= 0:
+        print("Boss Derrotado! Mostrando tela final...")
+        show_images_and_launch_next(
+            img1_path, # 'assets/img/quadrinho1.png'
+            img2_path, # 'assets/img/quadrinho2.png'
+            window, 
+            clock, 
+            W, 
+            H,
+            next_script='faroestejogo.py', 
+            ms_each=5000, 
+            fadeout_ms=1000
+        )
+        # O script encerra aqui devido ao sys.exit(0) dentro da função.
 
-    # update lasers
-    for laser in boss_lasers[:]:
-        laser.update(dt)
-        if laser.alive:
-            if player1.is_alive() and laser.collides_rect(player1.rect):
-                player1.take_damage(1)
-            if player2.is_alive() and laser.collides_rect(player2.rect):
-                player2.take_damage(1)
-        if not laser.alive:
-            boss_lasers.remove(laser)
-
-    # draw
+    if not any(p.is_alive() for p in all_players):
+        print("Game Over!")
+        game = False
+        
+    # 5. DESENHO
     if fundo_image:
         window.blit(fundo_image, (0, 0))
     else:
-        window.fill((20, 20, 40))
+        window.fill((0, 0, 0)) # Fundo preto
 
     boss.draw(window)
-    for laser in boss_lasers: laser.draw(window)
-    for bb in boss_bullets: bb.draw(window)
-    for b in bullets: b.draw(window)
+    for l in boss_lasers:
+        l.draw(window)
+    for b in bullets:
+        b.draw(window)
+    for b in boss_bullets:
+        b.draw(window)
+    
     player1.draw(window)
     player2.draw(window)
 
     pygame.display.flip()
 
-    if (not player1.is_alive()) and (not player2.is_alive()):
-        big_font = pygame.font.Font(None, 96)
-        text = big_font.render("BOTH PLAYERS DIED", True, (220, 20, 20))
-        tx = (W - text.get_width()) // 2
-        ty = (H - text.get_height()) // 2
-        window.blit(text, (tx, ty))
-        pygame.display.flip()
-        pygame.time.delay(1500)
-        game = False
-
 pygame.quit()
+sys.exit(0)

@@ -7,7 +7,7 @@ pygame.joystick.init()
 
 # ----- Tela -----
 window = pygame.display.set_mode((1920, 1090))
-pygame.display.set_caption('Duelo Faroeste - Melhor de 3')
+pygame.display.set_caption('Duelo Faroeste - Melhor de 5')
 
 # ----- Assets -----
 # após criar a janela (já tem W,H definidos)
@@ -38,7 +38,7 @@ GUN_TIP_POS_P2 = (1100, 700)
 KEY_P1 = pygame.K_a
 KEY_P2 = pygame.K_l
 BUTTON_A = 0
-BEST_OF = 3
+BEST_OF = 5
 PREP_TIME = 1.0
 POINT_TIME = 1.0
 MIN_RANDOM_DELAY = 1.0
