@@ -1,6 +1,8 @@
 import pygame
 import os
 import math
+import sys
+import subprocess
 from typing import Tuple, List, Optional
 
 # ---------------- Utilidade: carregar frames de uma pasta ----------------
@@ -59,10 +61,6 @@ class Player:
         self.invuln_time = 0.8
         self._invuln_timer = 0.0
         self.dead = False
-
-        # animação
-        ...
-
 
         # animação
         self.anim_root = anim_root
@@ -235,13 +233,10 @@ class Player:
         spawn_y = self.rect.centery + self.gun_offset[1] - self.h // 2
         b = Bullet(spawn_x, spawn_y, direction, image=bullet_image, owner=self)
 
-        # toca o som do tiro (se carregado)
-        # toca o som do tiro (se carregado)
         if self.shot_sound:
             self.shot_sound.play()
 
         return b
-
 
     def take_damage(self, amount: int):
         if self._invuln_timer > 0.0 or self.dead:
@@ -298,35 +293,29 @@ class Player:
                     pygame.draw.rect(surface, (200, 30, 30), self.rect)
 
         # --- barra de vida azul acima da cabeça ---
-        # dimensões da barra (ajuste se quiser)
-        bar_w = max(40, self.w)        # largura da barra: pelo menos 40 para personagens pequenos
-        bar_h = 8                      # altura da barra
+        bar_w = max(40, self.w)
+        bar_h = 8
         bar_x = self.rect.x
         bar_y = self.rect.y - (bar_h + 6)
 
-        # fundo escuro
         bg_rect = pygame.Rect(bar_x, bar_y, bar_w, bar_h)
         pygame.draw.rect(surface, (30, 30, 50), bg_rect)
 
-        # preenchimento proporcional ao HP
         hp_ratio = max(0.0, min(1.0, float(self.health) / float(self.max_health)))
         fill_w = int(bar_w * hp_ratio)
         fill_rect = pygame.Rect(bar_x, bar_y, fill_w, bar_h)
 
-        # efeito de piscar durante invulnerabilidade
         if hasattr(self, "_invuln_timer") and self._invuln_timer > 0.0:
-            # alterna cor a cada ~120ms
             if (pygame.time.get_ticks() // 120) % 2 == 0:
-                fill_color = (120, 180, 255)   # azul claro
+                fill_color = (120, 180, 255)
             else:
-                fill_color = (80, 130, 220)    # azul mais escuro
+                fill_color = (80, 130, 220)
         else:
-            fill_color = (40, 140, 255)        # azul principal
+            fill_color = (40, 140, 255)
 
         if fill_w > 0:
             pygame.draw.rect(surface, fill_color, fill_rect)
 
-        # borda da barra
         pygame.draw.rect(surface, (200, 200, 220), bg_rect, 1)
 
 # ---------------- Bullet (com owner) ----------------
@@ -354,7 +343,7 @@ class Bullet:
         if self.image:
             diameter = max(6, self.radius * 2)
             self.image = pygame.transform.smoothscale(self.image, (diameter, diameter))
-        self.owner = owner  # owner pode ser Player instance, 'boss', None, etc.
+        self.owner = owner
 
     def update(self, dt, screen_w, screen_h):
         self.x += self.dir_x * self.speed * dt
@@ -445,14 +434,13 @@ class Boss:
         self.hand_laser_cooldowns = [6.0, 6.0]
         self._time_since_last_laser = [0.0 for _ in self.hand_offsets]
         self.laser_width = 120
-        self.laser_height = int(screen_h * 0.55)  # ~55% da altura da tela
+        self.laser_height = int(screen_h * 0.55)
         self.laser_duration = 1.2
         self.laser_damage_per_second = 3.0
         self.bullet_image = None
         if bullet_image_path and os.path.exists(bullet_image_path):
             self.bullet_image = pygame.image.load(bullet_image_path).convert_alpha()
 
-        # <<< NOVO: falas do boss (SFX)
         self.speech_sounds = []
         speech7 = os.path.join('assets', 'sounds', 'som7.mp3')
         speech8 = os.path.join('assets', 'sounds', 'som8.mp3')
@@ -465,32 +453,22 @@ class Boss:
             snd8.set_volume(0.3)
             self.speech_sounds.append(snd8)
 
-        # intervalo base (segundos) entre falas quando vida cheia
         self.speech_interval_base = 4.0
-        # timer acumulado desde a última fala
         self._speech_timer = 0.0
-        # índice para alternar entre os sons
         self._speech_index = 0
-        # <<< /NOVO
 
     def update(self, dt):
         self._time += dt
 
-        # <<< NOVO: timer de fala (só enquanto vivo)
-        # só fale se houver sons carregados e ainda estiver vivo (health > 0)
         if self.speech_sounds and self.health > 0:
             self._speech_timer += dt
-            # reduz o intervalo conforme a vida diminui (mais urgente quando falta vida)
-            # aqui: quanto menor a vida, menor o intervalo; com limite mínimo
             health_ratio = max(0.0, self.health / max(1, self.max_health))
             current_interval = 10
             if self._speech_timer >= current_interval:
-                # toca o próximo som (alternando)
                 snd = self.speech_sounds[self._speech_index % len(self.speech_sounds)]
                 snd.play()
                 self._speech_index += 1
                 self._speech_timer = 0.0
-        # <<< /NOVO
 
         for i in range(len(self._time_since_last_bullet)):
             self._time_since_last_bullet[i] += dt
@@ -564,24 +542,23 @@ class Boss:
 AXIS_DEADZONE = 0.25
 
 GAMEPAD_MAPS = [
-    {   # joystick 0 (controle 1)
+    {
         "move_axis_x": 0,
         "move_axis_y": 1,
         "aim_axis_x": 2,
         "aim_axis_y": 3,
         "dpad_hat": 0,
         "button_jump": 0,
-        # remove button_fire mapping here (we will use trigger_axis)
-        "trigger_axis": 5,   # RT -> trocar se necessário
+        "trigger_axis": 5,
     },
-    {   # joystick 1 (controle 2) - ajustável
+    {
         "move_axis_x": 0,
         "move_axis_y": 1,
         "aim_axis_x": 2,
         "aim_axis_y": 3,
         "dpad_hat": 0,
         "button_jump": 0,
-        "trigger_axis": 5,   # RT
+        "trigger_axis": 5,
     }
 ]
 
@@ -648,15 +625,10 @@ def handle_joystick_event(event, players_list, bullets_list):
         player = players_list[player_index]
         pad_map = get_map_for_joystick_physical_index(joy_physical_index)
 
-        # JUMP still handled by button
         if btn == pad_map.get("button_jump"):
             player.try_jump()
             return
 
-        # NOTE: we intentionally DO NOT treat a generic button (e.g. B) as "fire".
-        # Firing is handled by the trigger axis (RT) in poll_joysticks.
-
-        # dpad fallback when pressing button (optional) - keep as before if you want
         hat_idx = pad_map.get("dpad_hat", 0)
         joy = joysticks[joy_physical_index] if (joy_physical_index is not None and joy_physical_index < len(joysticks)) else None
         if joy is not None and hat_idx is not None and joy.get_numhats() > hat_idx:
@@ -700,7 +672,6 @@ def poll_joysticks(players_list, bullets_list):
                 nx = dead_ax / length
                 ny = dead_ay / length
                 player.aim = (nx, ny)
-                # do not continue; we still want to check trigger
         else:
             hat_idx = pad_map.get("dpad_hat", None)
             if hat_idx is not None and joy.get_numhats() > hat_idx:
@@ -708,14 +679,10 @@ def poll_joysticks(players_list, bullets_list):
                 if hat != (0, 0):
                     player.aim = (hat[0], -hat[1])
 
-        # ---- NEW: trigger (RT) firing ----
         trigger_ax = pad_map.get("trigger_axis", None)
         if trigger_ax is not None and trigger_ax < joy.get_numaxes():
             val = joy.get_axis(trigger_ax)
-            # NOTE: many drivers report RT in [ -1 .. 1 ] (unpressed=-1 pressed=1)
-            # or [0..1]; we consider pressed when value > 0.5
             if val > 0.5:
-                # create bullet using player's current aim; player.shoot() will respect cooldown and state
                 dx, dy = player.aim
                 if dx == 0 and dy == 0:
                     dx = 1.0 if player.facing_right else -1.0
@@ -724,19 +691,43 @@ def poll_joysticks(players_list, bullets_list):
                 if b:
                     bullets_list.append(b)
 
+# ---------------- helper: mostrar imagens e abrir faroeste.py ----------------
+def show_image_for(ms, img_path, screen, clock_ref, W, H):
+    if not os.path.exists(img_path):
+        return
+    img = pygame.image.load(img_path).convert_alpha()
+    img = pygame.transform.smoothscale(img, (W, H))
+    start = pygame.time.get_ticks()
+    while pygame.time.get_ticks() - start < ms:
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit(0)
+        screen.blit(img, (0, 0))
+        pygame.display.flip()
+        clock_ref.tick(60)
+
+def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H, next_script='faroestejogo.py'):
+    # mostra primeira e segunda imagem (2s cada). ajustar ms se quiser.
+    show_image_for(2000, img1_path, screen, clock_ref, W, H)
+    show_image_for(2000, img2_path, screen, clock_ref, W, H)
+
+    # fecha o pygame e inicia o outro script
+    pygame.display.quit()
+    pygame.quit()
+    next_game = os.path.join(os.path.dirname(__file__), next_script)
+    subprocess.Popen([sys.executable, next_game])
+    sys.exit(0)
+
 # ---------------- Main game loop ----------------
 pygame.init()
+pygame.mixer.init()
 
-pygame.mixer.init()   # inicializa o sistema de áudio
-
-# caminho do arquivo de música (ajuste se necessário)
 music_path = os.path.join('assets', 'sounds', 'som4.mp3')
-
-# se o arquivo existir, carrega e toca em loop
 if os.path.exists(music_path):
     pygame.mixer.music.load(music_path)
-    pygame.mixer.music.set_volume(0.2)   # volume entre 0.0 e 1.0
-    pygame.mixer.music.play(-1)          # -1 = loop infinito
+    pygame.mixer.music.set_volume(0.2)
+    pygame.mixer.music.play(-1)
 
 joysticks, joystick_instance_ids = init_joysticks()
 
@@ -769,11 +760,14 @@ font = pygame.font.Font(None, 24)
 bullets, boss_bullets, boss_lasers = [], [], []
 game = True
 
-# keyboard fallback mappings
 P1_LEFT = pygame.K_a; P1_RIGHT = pygame.K_d; P1_LOOK_UP = pygame.K_o; P1_JUMP = pygame.K_w
 P1_AIMS = {pygame.K_i:(0,-1), pygame.K_k:(0,1), pygame.K_j:(-1,0), pygame.K_l:(1,0)}
 P2_LEFT = pygame.K_LEFT; P2_RIGHT = pygame.K_RIGHT; P2_LOOK_UP = pygame.K_RCTRL; P2_JUMP = pygame.K_RSHIFT
 P2_AIMS = {pygame.K_u:(0,-1), pygame.K_m:(0,1), pygame.K_h:(-1,0), pygame.K_k:(1,0)}
+
+# caminhos das imagens de quadrinho (ajuste se necessário)
+img1_path = os.path.join('assets', 'img', 'quadrinho1.png')
+img2_path = os.path.join('assets', 'img', 'quadrinho2.png')
 
 while game:
     dt = clock.tick(FPS) / 1000.0
@@ -808,21 +802,17 @@ while game:
     player1.handle_input_keyboard(keys, P1_LEFT, P1_RIGHT, P1_LOOK_UP, P1_AIMS)
     player2.handle_input_keyboard(keys, P2_LEFT, P2_RIGHT, P2_LOOK_UP, P2_AIMS)
 
-    # <-- pass bullets list so poll_joysticks can fire using RT -->
     poll_joysticks([player1, player2], bullets)
 
     player1.update(dt, W)
     player2.update(dt, W)
     boss.update(dt)
 
-        # --- colisão direta jogador x boss ---
     boss_rect = pygame.Rect(boss.rect.x, boss.rect.y, boss.w, boss.h)
     for player in (player1, player2):
         if player.is_alive() and boss_rect.colliderect(player.rect):
             player.take_damage(1)
 
-
-    # boss actions -> select alive player centers and fire toward them
     alive_centers = []
     if player1.is_alive():
         alive_centers.append(player1.rect.center)
@@ -842,6 +832,8 @@ while game:
             boss.health -= 1
             if boss.health <= 0:
                 print("Boss derrotado!")
+                # mostra as imagens e inicia faroeste.py
+                show_images_and_launch_next(img1_path, img2_path, window, clock, W, H, next_script='faroestejogo.py')
         if not b.alive:
             bullets.remove(b)
 
