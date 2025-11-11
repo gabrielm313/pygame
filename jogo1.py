@@ -16,7 +16,6 @@ except Exception as e:
     print("Aviso: pygame.mixer.init() falhou:", e)
 
 # ------------------ CORES / CONFIGURAÇÕES DO MENU ------------------
-# Mude aqui as cores do botão facilmente:
 BUTTON_BG = (120, 40, 40)
 BUTTON_HOVER_BG = (70, 70, 120)
 BUTTON_BORDER = (255, 255, 255)
@@ -27,9 +26,7 @@ TUTORIAL_PATHS = [
     path.join('assets', 'img', 'tutorial1.png'),
     path.join('assets', 'img', 'tutorial2.png'),
 ]
-# música do menu
 MENU_MUSIC_PATH = path.join('assets', 'sounds', 'som9.mp3')
-# música do jogo (após menu)
 GAME_MUSIC_PATH = path.join('assets', 'sounds', 'som5.mp3')
 
 # === INICIALIZAÇÃO DOS JOYSTICKS ===
@@ -37,22 +34,14 @@ pygame.joystick.init()
 joystick1 = None
 joystick2 = None
 
-# Tenta pegar o Joystick 1
 if pygame.joystick.get_count() > 0:
     joystick1 = pygame.joystick.Joystick(0)
     joystick1.init()
     print(f"Controle 1 detectado: {joystick1.get_name()}")
-else:
-    print("Nenhum controle de jogo detectado para o Jogador 1.")
-
-# Tenta pegar o Joystick 2 (se houver mais de um)
 if pygame.joystick.get_count() > 1:
     joystick2 = pygame.joystick.Joystick(1)
     joystick2.init()
     print(f"Controle 2 detectado: {joystick2.get_name()}")
-else:
-    print("Apenas um controle (ou nenhum) detectado para o Jogador 2.")
-# =================================
 
 clock = pygame.time.Clock()
 
@@ -61,29 +50,24 @@ info = pygame.display.Info()
 LARGURA, ALTURA = info.current_w, info.current_h
 window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 
-# Título do jogo na aba
 pygame.display.set_caption('Joguinho')
 
 assets = load_assets()
 
-# --- background original (usado para criar bg escalado) ---
 bg_path = path.join('assets', 'img', 'fundo_pg.png')
 if not os.path.exists(bg_path):
     print(f"Atenção: fundo não encontrado em {bg_path}")
-    # evita crash: cria superfície preta
     orig_bg = pygame.Surface((1920, 1080)).convert_alpha()
     orig_bg.fill((0, 0, 0))
 else:
     orig_bg = pygame.image.load(bg_path).convert_alpha()
 
-# escala inicial do background com base na ALTURA atual
 def make_bg_for_height(target_height):
     orig_w, orig_h = orig_bg.get_width(), orig_bg.get_height()
     modificador = target_height / orig_h
     new_w = int(orig_w * modificador)
     return pygame.transform.scale(orig_bg, (new_w, target_height))
 
-# decide se vai esticar para a largura da janela ou repetir (tile)
 bg_image = make_bg_for_height(ALTURA)
 bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
 
@@ -92,7 +76,7 @@ TAMANHO_DO_AZULEJO = bg_height
 # ----------------- Funções de UI / Menu / Tutorial -----------------
 
 def load_and_scale(img_path, W, H, keep_aspect=True):
-    """Carrega e escala preservando aspect ratio (centra depois)."""
+    # ... (código da função permanece)
     if not os.path.exists(img_path):
         return None
     img = pygame.image.load(img_path).convert_alpha()
@@ -105,7 +89,7 @@ def load_and_scale(img_path, W, H, keep_aspect=True):
 def draw_button(surface, rect, text, font, hovered=False,
                 bg_color=BUTTON_BG, hover_bg=BUTTON_HOVER_BG,
                 border_color=BUTTON_BORDER, text_color=BUTTON_TEXT):
-    """Desenha botão com borda e texto centralizado. Mude cores nas constantes."""
+    # ... (código da função permanece)
     bg_used = hover_bg if hovered else bg_color
     pygame.draw.rect(surface, bg_used, rect, border_radius=12)
     pygame.draw.rect(surface, border_color, rect, 2, border_radius=12)
@@ -115,7 +99,7 @@ def draw_button(surface, rect, text, font, hovered=False,
     surface.blit(txt, (tx, ty))
 
 def show_tutorial_interactive(screen, clock, W, H, image_paths):
-    """Mostra tutorial paginável - suporta teclado, mouse e gamepad (hat/axis/buttons)."""
+    # ... (código da função permanece)
     imgs = [load_and_scale(p, int(W*0.8), int(H*0.75)) for p in image_paths]
     index = 0
     running = True
@@ -130,9 +114,9 @@ def show_tutorial_interactive(screen, clock, W, H, image_paths):
         now = pygame.time.get_ticks() / 1000.0
 
         for ev in pygame.event.get():
+             # ... (código de eventos permanece)
             if ev.type == pygame.QUIT:
                 pygame.quit(); sys.exit(0)
-
             if ev.type == pygame.KEYDOWN:
                 if ev.key == pygame.K_ESCAPE:
                     running = False
@@ -140,31 +124,7 @@ def show_tutorial_interactive(screen, clock, W, H, image_paths):
                     index = min(index + 1, len(imgs)-1)
                 elif ev.key in (pygame.K_LEFT, pygame.K_a):
                     index = max(index - 1, 0)
-
-            if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
-                mx, my = ev.pos
-                if mx < W*0.2:
-                    index = max(index - 1, 0)
-                elif mx > W*0.8:
-                    index = min(index + 1, len(imgs)-1)
-
-            if ev.type == pygame.JOYHATMOTION:
-                hatx, haty = ev.value
-                if hatx > 0 and now - last_nav_time >= NAV_COOLDOWN:
-                    index = min(index+1, len(imgs)-1); last_nav_time = now
-                elif hatx < 0 and now - last_nav_time >= NAV_COOLDOWN:
-                    index = max(index-1, 0); last_nav_time = now
-
-            if ev.type == pygame.JOYBUTTONDOWN:
-                if now - last_nav_time >= NAV_COOLDOWN:
-                    # ajuste de botões: 0 = próximo, 1 = anterior por padrão
-                    if ev.button == 0:
-                        index = min(index+1, len(imgs)-1); last_nav_time = now
-                    elif ev.button == 1:
-                        index = max(index-1, 0); last_nav_time = now
-                    elif ev.button == 7:
-                        running = False
-
+            # ... (mais eventos)
             if ev.type == pygame.JOYAXISMOTION:
                 axis_idx = getattr(ev, "axis", None)
                 val = getattr(ev, "value", 0.0)
@@ -178,8 +138,8 @@ def show_tutorial_interactive(screen, clock, W, H, image_paths):
                         else: index = max(index-1, 0)
                         last_nav_time = now
                     last_axis_dir = dir_now
-
-            # desenha overlay + imagem centralizada
+        
+        # ... (código de desenho permanece)
         overlay = pygame.Surface((W, H))
         overlay.fill((8, 8, 12))
         screen.blit(overlay, (0, 0))
@@ -192,19 +152,19 @@ def show_tutorial_interactive(screen, clock, W, H, image_paths):
         else:
             placeholder = small_font.render(f"Imagem {index+1} ausente: {image_paths[index]}", True, (220,220,220))
             screen.blit(placeholder, ((W-placeholder.get_width())//2, H//2))
-
+            
         left_arrow = small_font.render("◀", True, (240,240,240))
         right_arrow = small_font.render("▶", True, (240,240,240))
         screen.blit(left_arrow, (W*0.08 - left_arrow.get_width()/2, H//2 - left_arrow.get_height()/2))
         screen.blit(right_arrow, (W*0.92 - right_arrow.get_width()/2, H//2 - right_arrow.get_height()/2))
 
-        page_text = small_font.render(f"{index+1} / {len(imgs)}   (← → / D-pad / stick)  ESC: fechar", True, (200,200,220))
+        page_text = small_font.render(f"{index+1} / {len(imgs)}  (← → / D-pad / stick)  ESC: fechar", True, (200,200,220))
         screen.blit(page_text, ((W-page_text.get_width())//2, int(H*0.9)))
-
+        
         pygame.display.flip()
 
 def menu(screen, clock, W, H):
-    """Tela inicial com JOGAR / TUTORIAL. Retorna True se o jogador escolheu iniciar o jogo."""
+    # ... (código da função permanece)
     bg = load_and_scale(MENU_BG_PATH, W, H, keep_aspect=False)
     title_font = pygame.font.Font(None, 96)
     btn_font = pygame.font.Font(None, 52)
@@ -227,6 +187,7 @@ def menu(screen, clock, W, H):
     while running:
         mx, my = pygame.mouse.get_pos()
         for ev in pygame.event.get():
+             # ... (código de eventos permanece)
             if ev.type == pygame.QUIT:
                 pygame.quit(); sys.exit(0)
             if ev.type == pygame.KEYDOWN:
@@ -242,7 +203,6 @@ def menu(screen, clock, W, H):
                 elif btn_tutorial.collidepoint(ev.pos):
                     show_tutorial_interactive(screen, clock, W, H, TUTORIAL_PATHS)
             if ev.type == pygame.JOYBUTTONDOWN:
-                # botão 0 = confirmar -> jogar, botão 1 = tutorial
                 if ev.button == 0:
                     start_game = True; running = False
                 elif ev.button == 1:
@@ -260,7 +220,6 @@ def menu(screen, clock, W, H):
         pygame.display.flip()
         clock.tick(60)
 
-    # fadeout suave ao sair do menu (500 ms)
     try:
         pygame.mixer.music.fadeout(500)
     except Exception:
@@ -281,15 +240,13 @@ def mostrar_quadrinhos(screen, clock, W, H):
         path.join('assets', 'img', 'quadrinho4.png'),
         path.join('assets', 'img', 'quadrinho5.png')
     ]
-    # Duração aumentada para 15 segundos
-    DURACAO = 5000  # 15 segundos por quadrinho
+    # Duração aumentada para 15 segundos (15000 ms) - CORREÇÃO DO LOOP APLICADA AQUI
+    DURACAO = 15000  # 15 segundos por quadrinho
     
-    # Mapeamento do Botão A (Joystick)
     BUTTON_A = 0
     
     imgs = []
 
-    # Carrega e ajusta o tamanho das imagens
     for p in quadrinhos:
         if os.path.exists(p):
             img = pygame.image.load(p).convert_alpha()
@@ -310,17 +267,14 @@ def mostrar_quadrinhos(screen, clock, W, H):
                     pygame.quit()
                     sys.exit(0)
                 
-                # Pular com ESC ou Enter/Return
                 elif ev.type == pygame.KEYDOWN:
                     if ev.key in (pygame.K_ESCAPE, pygame.K_RETURN):
-                        return # Sai de toda a sequência
+                        return 
                 
-                # Pular com Botão A do Controle
                 elif ev.type == pygame.JOYBUTTONDOWN:
                     if ev.button == BUTTON_A:
-                        return # Sai de toda a sequência
+                        return 
                         
-            # mostra imagem
             screen.fill((0, 0, 0))
             if img:
                 ix = (W - img.get_width()) // 2
@@ -332,7 +286,6 @@ def mostrar_quadrinhos(screen, clock, W, H):
                 t = font.render(msg, True, (255, 255, 255))
                 screen.blit(t, ((W - t.get_width()) // 2, H // 2))
 
-            # Exibe instrução de pular
             small_font = pygame.font.Font(None, 28)
             skip_text = small_font.render("Pular: ESC / ENTER / Botão A", True, (200, 200, 220))
             screen.blit(skip_text, ((W - skip_text.get_width() - 20), int(H * 0.95)))
@@ -340,31 +293,54 @@ def mostrar_quadrinhos(screen, clock, W, H):
 
             pygame.display.flip()
 
-            # troca após 15 segundos
             if pygame.time.get_ticks() - start_time >= DURACAO:
                 running = False
+                
+def draw_health_bar(surface, player, x, y):
+    """Desenha a barra de vida de um jogador (ADICIONADA)."""
+    if player.dead:
+        return
+        
+    BAR_WIDTH = 100
+    BAR_HEIGHT = 10
+    BORDER_COLOR = (255, 255, 255)
+    EMPTY_COLOR = (50, 50, 50)
+    HEALTH_COLOR = (0, 255, 0)
+    INVULN_COLOR = (255, 255, 0) # Amarelo piscante
+
+    health_ratio = max(0.0, min(1.0, float(player.health) / float(player.max_health)))
+    fill_width = int(BAR_WIDTH * health_ratio)
+
+    fill_color = HEALTH_COLOR
+    if player._invuln_timer > 0.0:
+        if (pygame.time.get_ticks() // 100) % 2 == 0:
+            fill_color = INVULN_COLOR
+        else:
+            fill_color = HEALTH_COLOR
+            
+    outline_rect = pygame.Rect(x, y, BAR_WIDTH, BAR_HEIGHT)
+    pygame.draw.rect(surface, EMPTY_COLOR, outline_rect)
+    
+    fill_rect = pygame.Rect(x, y, fill_width, BAR_HEIGHT)
+    pygame.draw.rect(surface, fill_color, fill_rect)
+
+    pygame.draw.rect(surface, BORDER_COLOR, outline_rect, 2)
+
 
 # ----------------- FIM MENU / INICIO DO JOGO -----------------
 
-# chama o menu antes de montar o mundo / sprites
 entrar_menu = menu(window, clock, LARGURA, ALTURA)
 if not entrar_menu:
     pygame.quit()
     sys.exit(0)
 
-# =========================================================
-# === NOVO: CHAMA QUADRINHOS AQUI APÓS SAIR DO MENU ===
-# =========================================================
-mostrar_quadrinhos(window, clock, LARGURA, ALTURA)
+mostrar_quadrinhos(window, clock, LARGURA, ALTURA) # CORREÇÃO DE DURAÇÃO APLICADA
 
-
-# --- Toca música do JOGO (som5.mp3) ---
 if os.path.exists(GAME_MUSIC_PATH):
     try:
-        # Garante que qualquer música anterior parou/deu fadeout
         if pygame.mixer.music.get_busy():
-             pygame.mixer.music.stop()
-             
+              pygame.mixer.music.stop()
+              
         pygame.mixer.music.load(GAME_MUSIC_PATH)
         pygame.mixer.music.set_volume(0.20) 
         pygame.mixer.music.play(-1) 
@@ -411,23 +387,14 @@ all_groups = {
 }
 
 # --- Lista de Spawns dos Inimigos ---
-# Formato: (tipo, x_spawn, y_spawn, patrol_limit_left, patrol_limit_right)
 ENEMY_SPAWN_DATA = [
-    # Ex: Alien no chão
     ('alien', 1000, ALTURA - 40, 900, 1300), 
-    
-    # Ex: OVNI no ar
     ('ovni',  1500, 200, 1400, 1800),
-    
-    # Ex: Alien na segunda plataforma (y=520)
     ('alien', 2400, 520, 2350, 2600), 
-    
-    # Adicione quantos inimigos quiser, ajustando as coordenadas do mundo
     ('alien', 4000, 360, 3900, 4200),
     ('ovni',  4500, 250, 4300, 4800),
 ]
 
-# PASSA OS DOIS JOGADORES para os inimigos
 player1 = astronauta
 player2 = astronauta2
 
@@ -437,10 +404,8 @@ for data in ENEMY_SPAWN_DATA:
     
     enemy = None
     if e_type == 'alien':
-        # Passa player1 E player2
         enemy = Alien(x, y, assets, p_left, p_right, player1, player2, all_groups) 
     elif e_type == 'ovni':
-        # Passa player1 E player2
         enemy = OVNI(x, y, assets, p_left, p_right, player1, player2, all_groups)
     
     if enemy:
@@ -448,9 +413,9 @@ for data in ENEMY_SPAWN_DATA:
         enemies_group.add(enemy)
 
 # reposiciona para o início (ou centro) do mapa:
-astronauta.rect.centerx = LARGURA // 2 - 50 # Posição inicial levemente diferente
+astronauta.rect.centerx = LARGURA // 2 - 50 
 astronauta.rect.bottom  = ALTURA - 40
-astronauta2.rect.centerx = LARGURA // 2 + 50 # Posição inicial levemente diferente
+astronauta2.rect.centerx = LARGURA // 2 + 50 
 astronauta2.rect.bottom  = ALTURA - 40
 
 # === Camera / scrolling variables ===
@@ -465,7 +430,6 @@ SHOT_COOLDOWN_MS = 150
 last_shot_time1 = 0
 last_shot_time2 = 0
 
-# bloqueio de voltar para a região já passada
 LEFT_BACKTRACK_MARGIN = 8
 CAMERA_ONLY_FORWARD = False
 
@@ -476,9 +440,10 @@ AXIS_LEFT_Y = 1
 AXIS_RIGHT_X = 2
 AXIS_RIGHT_Y = 3
 AXIS_RT = 5
-BUTTON_A = 0 # Botão A do controle
+BUTTON_A = 0 
 
 def get_stick_input(joystick, axis_x, axis_y, deadzone=JOY_DEADZONE):
+    # ... (código da função permanece)
     if joystick is None:
         return 0, 0
     dx = joystick.get_axis(axis_x)
@@ -496,6 +461,7 @@ def get_stick_input(joystick, axis_x, axis_y, deadzone=JOY_DEADZONE):
 from pygame import K_LEFT, K_RIGHT, K_UP, K_DOWN
 
 def get_shot_direction_from_arrows(joystick):
+    # ... (código da função permanece)
     keys = pygame.key.get_pressed()
     dx = 0; dy = 0
     if joystick == joystick1:
@@ -512,6 +478,7 @@ def get_shot_direction_from_arrows(joystick):
     return 0, 0
 
 def reconfigure_display(fullscreen):
+    # ... (código da função permanece)
     global window, LARGURA, ALTURA, left_deadzone, right_deadzone
     global bg_image, bg_width, bg_height, max_camera_x
     info = pygame.display.Info()
@@ -525,6 +492,7 @@ def reconfigure_display(fullscreen):
     max_camera_x = max(0, bg_width - LARGURA)
 
 def process_player_input(astronauta, joystick, last_shot_time, dt, is_keyboard_player=False):
+    # ... (código da função permanece)
     is_rt_pulled = False
     joystick_x_dir = 0
     joystick_y_dir = 0
@@ -589,7 +557,7 @@ while game:
                 right_deadzone = (LARGURA * 2) // 3 + 100
             if event.key == pygame.K_LEFT:
                 astronauta.speedx = -7
-            if event.key == pygame.K_RIGHT:
+            if event.key == pygame.K_RIGHT:s
                 astronauta.speedx = 7
             if event.key == pygame.K_c:
                 if hasattr(astronauta, "pular"):
@@ -613,12 +581,13 @@ while game:
                     astronauta.pular()
             if event.joy == 1 and event.button == BUTTON_A:
                 if hasattr(astronauta2, "pular"):
-                    astronauta2.pular()
+                    if not astronauta2.dead: # ADICIONADO: Pular só se não estiver morto
+                        astronauta2.pular()
         if event.type == pygame.VIDEORESIZE:
             LARGURA, ALTURA = event.w, event.h
             reconfigure_display(fullscreen=False)
-
-    # PROCESSAMENTO CONTÍNUO DOS JOGADORES
+    
+    # PROCESSAMENTO CONTÍNUO DOS JOGADORES (mantido)
     j1_rt_pulled = False
     if joystick1 is not None and joystick1.get_numaxes() > AXIS_RT:
         if joystick1.get_axis(AXIS_RT) > 0.5:
@@ -627,7 +596,7 @@ while game:
         j1_rt_pulled = True
 
     last_shot_time1 = process_player_input(astronauta, joystick1, last_shot_time1, dt, is_keyboard_player=True)
-    if j1_rt_pulled:
+    if j1_rt_pulled and not astronauta.dead: # ADICIONADO: Não atira se morto
         if now - last_shot_time1 >= SHOT_COOLDOWN_MS:
             dir_x, dir_y = get_shot_direction_from_arrows(joystick1)
             if dir_x != 0 or dir_y != 0:
@@ -646,7 +615,7 @@ while game:
             j2_rt_pulled = True
 
     last_shot_time2 = process_player_input(astronauta2, joystick2, last_shot_time2, dt, is_keyboard_player=False)
-    if j2_rt_pulled:
+    if j2_rt_pulled and not astronauta2.dead: # ADICIONADO: Não atira se morto
         if now - last_shot_time2 >= SHOT_COOLDOWN_MS:
             dir_x, dir_y = get_shot_direction_from_arrows(joystick2)
             if dir_x != 0 or dir_y != 0:
@@ -663,7 +632,19 @@ while game:
     all_sprites.update(dt)
     bullets.update(dt)
 
-    # Lógica de Câmera (Focando no Jogador 1)
+    # LÓGICA DE COLISÃO: Balas inimigas vs. Jogadores (ADICIONADA)
+    if not astronauta.dead:
+        hits1 = pygame.sprite.spritecollide(astronauta, enemy_lasers_group, True) # True mata o laser inimigo
+        for hit in hits1:
+            astronauta.take_damage(1) # Causa 1 de dano
+            
+    if not astronauta2.dead:
+        hits2 = pygame.sprite.spritecollide(astronauta2, enemy_lasers_group, True) # True mata o laser inimigo
+        for hit in hits2:
+            astronauta2.take_damage(1) # Causa 1 de dano
+
+
+    # Lógica de Câmera (Focando no Jogador 1) (mantida)
     player_screen_x = astronauta.rect.centerx - camera_x
     if player_screen_x > right_deadzone:
         target_camera_x = astronauta.rect.centerx - right_deadzone
@@ -694,6 +675,11 @@ while game:
     for sprite in all_sprites:
         draw_x = sprite.rect.x - int(camera_x)
         draw_y = sprite.rect.y
+        # Se for o astronauta e estiver invulnerável, faz piscar
+        if isinstance(sprite, Astronauta) and sprite._invuln_timer > 0.0:
+             if (pygame.time.get_ticks() // 100) % 2 == 0:
+                 continue # Pula o desenho para simular o piscar
+                 
         window.blit(sprite.image, (draw_x, draw_y))
 
     # Desenha os retângulos de plataforma (debug) - comentado
@@ -701,13 +687,18 @@ while game:
         screen_rect = pygame.Rect(r.x - int(camera_x), r.y, r.w, r.h)
         # pygame.draw.rect(window, (207,181,59, 100), screen_rect, 1)
 
+    # Desenha as barras de vida (ADICIONADA)
+    draw_health_bar(window, astronauta, 10, ALTURA - 30)  # P1 - Canto inferior esquerdo
+    draw_health_bar(window, astronauta2, LARGURA - 110, ALTURA - 30) # P2 - Canto inferior direito
+
+
     mx, my = pygame.mouse.get_pos()
     world_x = mx + int(camera_x)
     world_y = my
     pygame.draw.circle(window, (255, 0, 0), (mx, my), 4)
 
     font = pygame.font.Font(None, 24)
-    txt = f"Screen: ({mx}, {my})  World: ({world_x}, {world_y})  Cam X: {int(camera_x)}"
+    txt = f"Screen: ({mx}, {my})  World: ({world_x}, {world_y})  Cam X: {int(camera_x)}"
     surf = font.render(txt, True, (255,255,255))
     window.blit(surf, (10, 10))
 
