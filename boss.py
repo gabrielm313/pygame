@@ -746,7 +746,7 @@ def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H,
         else:
             pygame.mixer.music.stop()
 
-    # mostra a primeira imagem por ms_each ms
+    # mostra a primeira imagem por ms_each ms (100% usando ia)
     if os.path.exists(img1_path):
         img = pygame.image.load(img1_path).convert_alpha()
         img = pygame.transform.smoothscale(img, (W, H))
@@ -760,7 +760,7 @@ def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H,
             pygame.display.flip()
             clock_ref.tick(60)
 
-    # mostra a segunda imagem por ms_each ms
+    # mostra a segunda imagem por ms_each ms (feito com chatgpt)
     if os.path.exists(img2_path):
         img = pygame.image.load(img2_path).convert_alpha()
         img = pygame.transform.smoothscale(img, (W, H))
@@ -789,7 +789,7 @@ def show_images_and_launch_next(img1_path, img2_path, screen, clock_ref, W, H,
     sys.exit(0)
 
 
-# ---------------- Main game loop ----------------
+# ---------------- Main game loop (feito com chat )----------------
 pygame.init()
 pygame.mixer.init()
 
