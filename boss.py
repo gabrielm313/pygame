@@ -336,14 +336,40 @@ class Bullet:
         self.dir_y = dy / length
         self.speed = Bullet.SPEED
         self.radius = Bullet.RADIUS
-        self.color = Bullet.COLOR
         self.life = Bullet.LIFETIME
         self.alive = True
         self.image = image
-        if self.image:
-            diameter = max(6, self.radius * 2)
-            self.image = pygame.transform.smoothscale(self.image, (diameter, diameter))
         self.owner = owner
+
+        # <<< CHANGED: color by owner and tint image if needed
+        def tint_image(src_surf: pygame.Surface, color: Tuple[int,int,int]) -> pygame.Surface:
+            """Return a color-tinted copy of src_surf. Keeps alpha."""
+            surf = src_surf.copy().convert_alpha()
+            # create fill surface and multiply
+            fill = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+            fill.fill((color[0], color[1], color[2], 0))
+            surf.blit(fill, (0,0), special_flags=pygame.BLEND_RGBA_MULT)
+            return surf
+
+        # choose color: boss = red, players = pink
+        boss_color = (0, 255, 20)
+        player_pink = (255, 105, 180)
+
+        if self.image:
+            # if owner is 'boss' or owner has attribute identifying boss, tint accordingly
+            if owner == 'boss':
+                self.image = tint_image(self.image, boss_color)
+                self.color = boss_color
+            else:
+                # owner is player object or None -> pink for players
+                self.image = tint_image(self.image, player_pink)
+                self.color = player_pink
+        else:
+            # no image: set color for drawing circle
+            if owner == 'boss':
+                self.color = boss_color
+            else:
+                self.color = player_pink
 
     def update(self, dt, screen_w, screen_h):
         self.x += self.dir_x * self.speed * dt
