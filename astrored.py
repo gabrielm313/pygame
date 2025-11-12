@@ -583,15 +583,14 @@ def run_boss1(screen, clock, W, H):
         fundo_image = pygame.image.load(fundo_path).convert()
         fundo_image = pygame.transform.smoothscale(fundo_image, (W,H))
 
-    # PREPARAR lista de frames de caminhada para o Player 1
-    walk_frames_p1 = []
-    for i in range(4):
-        fp = os.path.join('assets','img', f'andar_{i}.png')
-        walk_frames_p1.append(fp)
+    # PREPARAR lista de frames de caminhada para o Player 1 e Player 2
+    walk_frames_p1 = [os.path.join('assets','img', f'andar_{i}.png') for i in range(4)]
+    walk_frames_p2 = [os.path.join('assets','img', f'andarv_{i}.png') for i in range(4)]
 
     player1 = PlayerSimple(W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'),
                            walk_frames_paths=walk_frames_p1, walk_frame_interval=0.10)
-    player2 = PlayerSimple(3*W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'))
+    player2 = PlayerSimple(3*W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'),
+                           walk_frames_paths=walk_frames_p2, walk_frame_interval=0.10)
     boss = Boss1(W//2 - 200, 60, W, H, image_path=os.path.join('assets','img','boss2.png'))
     bullets = []
     boss_bullets = []
@@ -827,15 +826,14 @@ def run_boss2(screen, clock, W, H):
         pygame.mixer.music.set_volume(0.18)
         pygame.mixer.music.play(-1)
 
-    # opcional: usar animação de andar para player1 aqui também (mantive apenas para P1 conforme pedido)
-    walk_frames_p1 = []
-    for i in range(4):
-        fp = os.path.join('assets','img', f'andar_{i}.png')
-        walk_frames_p1.append(fp)
+    # preparar frames de caminhada para player1 e player2 (andar_* e andarv_*)
+    walk_frames_p1 = [os.path.join('assets','img', f'andar_{i}.png') for i in range(4)]
+    walk_frames_p2 = [os.path.join('assets','img', f'andarv_{i}.png') for i in range(4)]
 
     player1 = PlayerSimple(W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'),
                            walk_frames_paths=walk_frames_p1, walk_frame_interval=0.10)
-    player2 = PlayerSimple(3*W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'))
+    player2 = PlayerSimple(3*W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'),
+                           walk_frames_paths=walk_frames_p2, walk_frame_interval=0.10)
     boss = Boss2(W//4, 80, W, H, image_path=os.path.join('assets','img','nave boss.png'),
                  bullet_image_path=os.path.join('assets','img','bala.png'))
     bullets = []; boss_bullets = []; boss_lasers = []
