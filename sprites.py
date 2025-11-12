@@ -117,7 +117,7 @@ class Astronauta(pygame.sprite.Sprite):
 
     def pular(self):
         if self.on_ground:
-            self.speedy = -92
+            self.speedy = -70
             self.on_ground = False
 
     def take_damage(self, amount: int) -> bool:
@@ -135,26 +135,39 @@ class Astronauta(pygame.sprite.Sprite):
         self.kill()
 
 class Bullet(pygame.sprite.Sprite):
-    def __init__(self, x, y, dir_x, dir_y, speed=500, world_w=20000, world_h=20000):
+    def __init__(self, x, y, dir_x, dir_y, speed=500, world_w=20000, world_h=20000,
+                 color=(255,0,255), size=(12, 6)):
+        """
+        x,y : spawn world coords
+        dir_x, dir_y : direção (não precisa estar normalizada)
+        speed : pixels por segundo
+        color : (r,g,b)
+        size : (width, height) em pixels (usado para gerar a surface)
+        """
         super().__init__()
-        self.image = pygame.Surface((12, 6), pygame.SRCALPHA)
-        pygame.draw.rect(self.image, (255,0,255), self.image.get_rect())
-        self.orig_image = self.image
-
+        w, h = size
+        # cria a imagem da bala com alpha
+        self.orig_image = pygame.Surface((w, h), pygame.SRCALPHA)
+        # desenha retângulo preenchido com a cor
+        pygame.draw.rect(self.orig_image, color, (0, 0, w, h))
+        # posição
         self.x = float(x)
         self.y = float(y)
-        self.rect = self.image.get_rect(center=(int(self.x), int(self.y)))
+        self.rect = self.orig_image.get_rect(center=(int(self.x), int(self.y)))
 
+        # normaliza direção
         length = math.hypot(dir_x, dir_y)
         if length == 0:
             self.dir_x, self.dir_y = 1.0, 0.0
         else:
             self.dir_x, self.dir_y = dir_x / length, dir_y / length
 
-        self.speed = 700
+        # usa o speed passado
+        self.speed = float(speed)
         self.world_w = world_w
         self.world_h = world_h
 
+        # rotaciona a imagem de acordo com a direção para ficar visual correto
         angle_deg = -math.degrees(math.atan2(self.dir_y, self.dir_x))
         self.image = pygame.transform.rotate(self.orig_image, angle_deg)
         self.rect = self.image.get_rect(center=(int(self.x), int(self.y)))
@@ -163,9 +176,11 @@ class Bullet(pygame.sprite.Sprite):
         self.x += self.dir_x * self.speed * dt
         self.y += self.dir_y * self.speed * dt
         self.rect.center = (int(self.x), int(self.y))
+        # mata quando sai do mundo
         if (self.rect.right < 0 or self.rect.left > self.world_w or
             self.rect.bottom < 0 or self.rect.top > self.world_h):
             self.kill()
+
 
 class EnemyLaser(pygame.sprite.Sprite):
     def __init__(self, x, y, target_dx, target_dy, speed=600, color=RED, width=8, height=22):

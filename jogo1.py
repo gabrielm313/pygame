@@ -1,4 +1,4 @@
-# jogo.py  (arquivo completo — substitua o seu)
+# jogo.py (arquivo completo — substitua o seu)
 import pygame
 import math
 from os import path
@@ -8,6 +8,7 @@ from config import LARGURA, ALTURA, FPS, IMG_DIR
 from assets import load_assets
 import sprites
 from pygame import K_LEFT, K_RIGHT, K_UP, K_DOWN
+import random
 
 # inicialização (sem try/except)
 pygame.init()
@@ -23,6 +24,26 @@ TUTORIAL_PATHS = [path.join('assets', 'img', 'tutorial1.png'),
                   path.join('assets', 'img', 'tutorial2.png')]
 MENU_MUSIC_PATH = path.join('assets', 'sounds', 'som9.mp3')
 GAME_MUSIC_PATH = path.join('assets', 'sounds', 'som5.mp3')
+
+# Balanceamento / constantes (ajuste fácil)
+PLAYER_MOVE_SPEED = 5 					# velocidade do jogador
+PLAYER_JUMP_SPEED = -92 				# velocidade do pulo (negativa => sobe)
+PLAYER_BULLET_SPEED = 450 				# velocidade do tiro do jogador
+PLAYER_BULLET_COLOR = (255, 120, 200) 	# rosa
+PLAYER_BULLET_SIZE = 12 				# diâmetro (circular)
+SHOT_COOLDOWN_MS = 250                  # Adicionado: Cooldown do tiro do jogador (250ms)
+
+# INIMIGOS - VALORES REFORMULADOS
+ALIEN_SHOOT_INTERVAL_MS = 5000 			# 5s (REFORMULADO)
+OVNI_SHOOT_INTERVAL_MS = 7000 			# 7s (REFORMULADO)
+ENEMY_BULLET_SPEED = 200.0 				# velocidade geral dos tiros inimigos
+ALIEN_BULLET_COLOR = (40, 220, 40) 		# verde (aliens)
+ALIEN_BULLET_SIZE = 30 					# grande
+OVNI_BULLET_COLOR = (90, 160, 255) 		# azul
+OVNI_BULLET_SIZE = (12, 48) 			# largura x altura (laser)
+
+# alcance para forçar tiro mesmo fora da tela (MANTIDO)
+ENEMY_SHOOT_PROXIMITY = 900 
 
 # joysticks
 pygame.joystick.init()
@@ -51,7 +72,6 @@ bg_path = path.join('assets', 'img', 'fundo_pg.png')
 if os.path.exists(bg_path):
     orig_bg = pygame.image.load(bg_path).convert_alpha()
 else:
-    # fallback: superfície preta
     orig_bg = pygame.Surface((1920, 1080)).convert_alpha()
     orig_bg.fill((0, 0, 0))
 
@@ -64,7 +84,76 @@ def make_bg_for_height(target_height):
 bg_image = make_bg_for_height(ALTURA)
 bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
 
-# util: carregar e escalar (usado pelo menu)
+# --- Nova classe Bullet (reformulada) ---
+class Bullet(pygame.sprite.Sprite):
+    """
+    Bullet flexível:
+      - se shape == 'circle' -> desenha círculo de diameter=size
+      - se shape == 'rect'   -> desenha retângulo de size (w,h)
+    Parâmetros:
+      x,y: posição inicial (mundo)
+      dir_x, dir_y: direção (não precisa estar normalizada)
+      speed: pixels/seg
+      world_w/world_h: limites para matar fora do mundo
+      color: RGB
+      size: int (circle) ou (w,h) tuple (rect)
+      shape: 'circle' ou 'rect'
+    """
+    def __init__(self, x, y, dir_x, dir_y, speed=300.0, world_w=20000, world_h=20000,
+                 color=(255,255,255), size=10, shape='rect'):
+        super().__init__()
+        # normaliza direção
+        length = math.hypot(dir_x, dir_y)
+        if length == 0:
+            self.dir_x, self.dir_y = 1.0, 0.0
+        else:
+            self.dir_x, self.dir_y = dir_x / length, dir_y / length
+
+        self.speed = float(speed)
+        self.color = color
+        self.world_w = world_w
+        self.world_h = world_h
+        self.shape = shape
+
+        # cria superfície dependendo do formato solicitado
+        if shape == 'circle':
+            diameter = int(size)
+            if diameter < 2: diameter = 2
+            self.image = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
+            pygame.draw.circle(self.image, self.color, (diameter//2, diameter//2), diameter//2)
+            self.rect = self.image.get_rect(center=(int(x), int(y)))
+        else:
+            # espera size = (w,h) ou int -> converte
+            if isinstance(size, int):
+                w, h = size, size
+            else:
+                w, h = int(size[0]), int(size[1])
+            self.image = pygame.Surface((w, h), pygame.SRCALPHA)
+            self.image.fill(self.color)
+            # rotaciona a imagem reta para apontar para a direção (apenas estético)
+            angle = -math.degrees(math.atan2(self.dir_y, self.dir_x))
+            self.orig_image = self.image
+            try:
+                self.image = pygame.transform.rotate(self.orig_image, angle)
+            except Exception:
+                self.image = self.orig_image
+            self.rect = self.image.get_rect(center=(int(x), int(y)))
+
+        # posição em float para movimento suave
+        self.x = float(int(x))
+        self.y = float(int(y))
+
+    def update(self, dt):
+        self.x += self.dir_x * self.speed * dt
+        self.y += self.dir_y * self.speed * dt
+        self.rect.center = (int(self.x), int(self.y))
+        # mata se fora de mundo (margem)
+        M = 200
+        if (self.rect.right < -M or self.rect.left > self.world_w + M or
+            self.rect.bottom < -M or self.rect.top > self.world_h + M):
+            self.kill()
+
+# --- util: carregar e escalar (usado pelo menu) ---
 def load_and_scale(img_path, W, H, keep_aspect=True):
     if not os.path.exists(img_path):
         return None
@@ -120,7 +209,7 @@ def show_tutorial_interactive(screen, clock, W, H, image_paths):
                     if dir_now != 0 and dir_now != last_axis_dir and (now - last_nav_time >= NAV_COOLDOWN):
                         if dir_now > 0: index = min(index+1, len(imgs)-1)
                         else: index = max(index-1, 0)
-                        last_nav_time = now
+                    last_nav_time = now
                     last_axis_dir = dir_now
         overlay = pygame.Surface((W, H))
         overlay.fill((8, 8, 12))
@@ -137,7 +226,7 @@ def show_tutorial_interactive(screen, clock, W, H, image_paths):
         right_arrow = small_font.render("▶", True, (240,240,240))
         screen.blit(left_arrow, (W*0.08 - left_arrow.get_width()/2, H//2 - left_arrow.get_height()/2))
         screen.blit(right_arrow, (W*0.92 - right_arrow.get_width()/2, H//2 - right_arrow.get_height()/2))
-        page_text = small_font.render(f"{index+1} / {len(imgs)}  (← → / D-pad / stick)  ESC: fechar", True, (200,200,220))
+        page_text = small_font.render(f"{index+1} / {len(imgs)}  (← → / D-pad / stick)  ESC: fechar", True, (200,200,220))
         screen.blit(page_text, ((W-page_text.get_width())//2, int(H*0.9)))
         pygame.display.flip()
 
@@ -288,19 +377,16 @@ platform_rects = [
     pygame.Rect(13200, 530, 910, 4)
 ]
 
-# aliases para classes
+# aliases para classes (astronauta / inimigos ficam no sprites)
 Astronauta = sprites.Astronauta
-Bullet = sprites.Bullet
 Alien = sprites.Alien
 OVNI = sprites.OVNI
-EnemyLaser = sprites.EnemyLaser
 
 # grupos
 all_sprites = pygame.sprite.Group()
-bullets = pygame.sprite.Group()
-platforms = pygame.sprite.Group()
+bullets = pygame.sprite.Group() 		# tiros do jogador
+enemy_lasers_group = pygame.sprite.Group() 	# tiros inimigos
 enemies_group = pygame.sprite.Group()
-enemy_lasers_group = pygame.sprite.Group()
 
 # cria jogadores
 astronauta = Astronauta(all_sprites, assets, row=0, column=0, platforms=platform_rects)
@@ -308,7 +394,7 @@ all_sprites.add(astronauta)
 astronauta2 = Astronauta(all_sprites, assets, row=0, column=0, platforms=platform_rects)
 all_sprites.add(astronauta2)
 
-# dicionário de grupos para passar aos inimigos
+# dicionário de grupos para passar aos inimigos (se precisarem)
 all_groups = {
     'all_sprites': all_sprites,
     'enemies': enemies_group,
@@ -316,7 +402,7 @@ all_groups = {
     'assets': assets
 }
 
-# spawns
+# spawns (mantive o seu array)
 ENEMY_SPAWN_DATA = [
     ('alien', 1089, ALTURA - 40, 1000, 1000),
     ('alien', 2115, ALTURA - 40, 1800, 2500),
@@ -338,19 +424,17 @@ ENEMY_SPAWN_DATA = [
     ('alien', 14000, ALTURA - 40, 7000, 8000),
 
     ('alien', 1000, 360, 1300, 1300),
-    ('alien', 3417, 491, 3000, 4000),   
-    ('alien', 4480, 360, 4000, 4000),   
-    #('alien', 5300, 890, 5000, 5000),   
+    ('alien', 3417, 491, 3000, 4000),
+    ('alien', 4480, 360, 4000, 4000),
     ('alien', 6300, 860, 6000, 7000),
     ('alien', 7350, 360, 7000, 8000),
     ('alien', 8580, 370, 3000, 3000),
     ('alien', 11200, 980, 3000, 3000),
     ('alien', 13650, 550, 3000, 3000),
 
-
     ('ovni', 1595, 150, 1100, 1800),
     ('ovni', 3010, 120, 2600, 3600),
-    ('ovni', 4323, 150, 3800, 4800),   
+    ('ovni', 4323, 150, 3800, 4800),
     ('ovni', 5600, 150, 5200, 6000),
     ('ovni', 7140, 150, 6640, 6640),
     ('ovni', 8200, 150, 7900, 8500),
@@ -359,7 +443,7 @@ ENEMY_SPAWN_DATA = [
     ('ovni', 11740, 150, 11300, 12000),
     ('ovni', 12300, 150, 12000, 12600),
     ('ovni', 12900, 150, 12600, 13250),
-    ('ovni', 13700, 215, 13200, 14200),    
+    ('ovni', 13700, 215, 13200, 14200),
 ]
 
 player1 = astronauta
@@ -373,6 +457,17 @@ for data in ENEMY_SPAWN_DATA:
     elif e_type == 'ovni':
         enemy = OVNI(x, y, assets, p_left, p_right, player1, player2, all_groups)
     if enemy:
+        # inicializa timer fixo por tipo
+        if isinstance(enemy, Alien):
+            enemy._next_shot_time = pygame.time.get_ticks() + ALIEN_SHOOT_INTERVAL_MS
+            enemy._shot_interval = ALIEN_SHOOT_INTERVAL_MS
+        elif isinstance(enemy, OVNI):
+            enemy._next_shot_time = pygame.time.get_ticks() + OVNI_SHOOT_INTERVAL_MS
+            enemy._shot_interval = OVNI_SHOOT_INTERVAL_MS
+        else:
+            enemy._next_shot_time = pygame.time.get_ticks() + random.randint(1000, 3000)
+            enemy._shot_interval = random.randint(1000, 3000)
+
         all_sprites.add(enemy)
         enemies_group.add(enemy)
 
@@ -389,8 +484,7 @@ left_deadzone = LARGURA // 3
 right_deadzone = (LARGURA * 2) // 3
 max_camera_x = max(0, bg_width - LARGURA)
 
-# tiros / cooldowns
-SHOT_COOLDOWN_MS = 250
+# tiros / cooldowns jogador
 last_shot_time1 = 0
 last_shot_time2 = 0
 
@@ -425,13 +519,20 @@ def get_shot_direction_from_arrows(joystick):
     keys = pygame.key.get_pressed()
     dx = 0; dy = 0
     if joystick == joystick1:
-        if keys[K_RIGHT]: dx += 1
-        if keys[K_LEFT]: dx -= 1
-        if keys[K_DOWN]: dy += 1
-        if keys[K_UP]: dy -= 1
+        # ATENÇÃO: As setas do teclado para o JOGADOR 1 são as de MOVIMENTO
+        # O código original usa X para atirar, mas não define a direção do tiro por teclado.
+        # Mantendo a lógica original (sem teclado-tiro direcional para J1 no input handler principal)
+        # Se você quiser adicionar:
+        # if keys[K_RIGHT]: dx += 1
+        # if keys[K_LEFT]: dx -= 1
+        # if keys[K_DOWN]: dy += 1
+        # if keys[K_UP]: dy -= 1
+        pass # Deixando as setas (K_LEFT/K_RIGHT/K_UP/K_DOWN) livres para a movimentação do P1.
+
     if dx != 0 or dy != 0:
         return dx, dy
     if joystick is not None:
+        # Pega direção do tiro do stick direito
         dir_x, dir_y = get_stick_input(joystick, AXIS_RIGHT_X, AXIS_RIGHT_Y)
         if dir_x != 0 or dir_y != 0:
             return dir_x, dir_y
@@ -450,6 +551,7 @@ def reconfigure_display(fullscreen):
     bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
     max_camera_x = max(0, bg_width - LARGURA)
 
+# Função para processar o input do jogador (MANTIDA)
 def process_player_input(astronauta, joystick, last_shot_time, dt, is_keyboard_player=False):
     is_rt_pulled = False
     joystick_x_dir = 0
@@ -460,32 +562,45 @@ def process_player_input(astronauta, joystick, last_shot_time, dt, is_keyboard_p
         if rt_value > 0.5:
             is_rt_pulled = True
     keys = pygame.key.get_pressed()
+    
+    # Movimento por teclado (JOGADOR 1)
     if is_keyboard_player:
-        if keys[K_LEFT]:
-            astronauta.speedx = -7
-        elif keys[K_RIGHT]:
-            astronauta.speedx = 7
-        elif joystick_x_dir == 0:
+        if keys[K_LEFT] and joystick_x_dir == 0:
+            astronauta.speedx = -PLAYER_MOVE_SPEED
+        elif keys[K_RIGHT] and joystick_x_dir == 0:
+            astronauta.speedx = PLAYER_MOVE_SPEED
+        elif not keys[K_LEFT] and not keys[K_RIGHT] and joystick_x_dir == 0:
             astronauta.speedx = 0
+    
+    # Movimento por Joystick
     if joystick_x_dir != 0:
-        astronauta.speedx = joystick_x_dir * 7
-    elif not is_keyboard_player and joystick_x_dir == 0:
+        astronauta.speedx = joystick_x_dir * PLAYER_MOVE_SPEED
+    elif not is_keyboard_player and joystick_x_dir == 0: # JOGADOR 2 (só joystick)
         astronauta.speedx = 0
+        
+    # Agachar/Cair (D-pad/Stick-Down)
     if joystick_y_dir > 0 and astronauta.on_ground:
         astronauta.drop_through_timer = astronauta.drop_through_duration
         astronauta.on_ground = False
         if astronauta.speedy <= 0:
             astronauta.speedy = 1
+            
     now = pygame.time.get_ticks()
+    
+    # Lógica de Tiro
     if is_rt_pulled:
         if now - last_shot_time >= SHOT_COOLDOWN_MS:
             dir_x, dir_y = get_shot_direction_from_arrows(joystick)
             if dir_x != 0 or dir_y != 0:
                 last_shot_time = now
                 gun_x, gun_y = astronauta.get_gun_tip()
-                b = Bullet(gun_x, gun_y, dir_x, dir_y, speed=900, world_w=bg_width, world_h=bg_height)
+                # jogador: bala rosa circular
+                b = Bullet(gun_x, gun_y, dir_x, dir_y, speed=PLAYER_BULLET_SPEED,
+                            world_w=bg_width, world_h=bg_height,
+                            color=PLAYER_BULLET_COLOR, size=PLAYER_BULLET_SIZE, shape='circle')
                 bullets.add(b)
                 all_sprites.add(b)
+                
     return last_shot_time
 
 # -------------------- Loop principal --------------------
@@ -502,49 +617,61 @@ while game:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 game = False
+            # Pulo (JOGADOR 1)
             if event.key in (pygame.K_w, pygame.K_UP, pygame.K_SPACE):
-                if not astronauta.dead:
+                if not astronauta.dead and astronauta.on_ground: # Adicionado 'astronauta.on_ground' para melhor controle
                     astronauta.pular()
+            # Pulo (JOGADOR 2)
             if event.key == pygame.K_i:
-                if not astronauta2.dead:
+                if not astronauta2.dead and astronauta2.on_ground:
                     astronauta2.pular()
-            if event.key == pygame.K_LEFT:
-                astronauta.speedx = -7
-            if event.key == pygame.K_RIGHT:
-                astronauta.speedx = 7
+            # Tiro (JOGADOR 1 - Teclado - Usa 'X' para atirar)
             if event.key == pygame.K_x:
-                if now - last_shot_time1 >= SHOT_COOLDOWN_MS:
-                    j1_shot_by_keyboard = True
+                if not astronauta.dead and now - last_shot_time1 >= SHOT_COOLDOWN_MS:
+                    # Direção do tiro por teclado J1
+                    # Não há teclas direcionais secundárias para o tiro J1 por teclado,
+                    # então vamos atirar na direção que ele está virado (astronauta.facing)
+                    dx = 1 if astronauta.facing == 'right' else -1
+                    dy = 0
+                    
+                    last_shot_time1 = now
+                    gun_x, gun_y = astronauta.get_gun_tip()
+                    b = Bullet(gun_x, gun_y, dx, dy, speed=PLAYER_BULLET_SPEED,
+                                world_w=bg_width, world_h=bg_height,
+                                color=PLAYER_BULLET_COLOR, size=PLAYER_BULLET_SIZE, shape='circle')
+                    bullets.add(b)
+                    all_sprites.add(b)
+            # Agachar/Cair (JOGADOR 1 - Teclado - Usa K_DOWN)
             if event.key == pygame.K_DOWN:
                 if astronauta.on_ground:
                     astronauta.drop_through_timer = astronauta.drop_through_duration
                     astronauta.on_ground = False
                     if astronauta.speedy <= 0:
                         astronauta.speedy = 1
+                        
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_LEFT or event.key == pygame.K_RIGHT:
-                if joystick1 is None or get_stick_input(joystick1, AXIS_LEFT_X, AXIS_LEFT_Y)[0] == 0:
+                # Garante que, se o joystick não estiver em uso, o movimento pare.
+                j1_joystick_x_dir = get_stick_input(joystick1, AXIS_LEFT_X, AXIS_LEFT_Y)[0] if joystick1 else 0
+                if j1_joystick_x_dir == 0:
                     astronauta.speedx = 0
+
+        # Pulo por Joystick
         if event.type == pygame.JOYBUTTONDOWN:
             if event.button == BUTTON_A:
-                if event.joy == 0:
+                if event.joy == 0: # Joystick 1
                     if not astronauta.dead:
                         astronauta.pular()
-                elif event.joy == 1:
+                elif event.joy == 1: # Joystick 2
                     if not astronauta2.dead:
                         astronauta2.pular()
+                        
         if event.type == pygame.VIDEORESIZE:
             LARGURA, ALTURA = event.w, event.h
             reconfigure_display(fullscreen=False)
 
     # process inputs
-    j1_rt_pulled = False
-    if joystick1 is not None and joystick1.get_numaxes() > AXIS_RT:
-        if joystick1.get_axis(AXIS_RT) > 0.5:
-            j1_rt_pulled = True
-    if j1_shot_by_keyboard:
-        j1_rt_pulled = True
-
+    # O código original está duplicado, essa chamada já trata movimento e tiro (RT)
     last_shot_time1 = process_player_input(astronauta, joystick1, last_shot_time1, dt, is_keyboard_player=True)
     last_shot_time2 = process_player_input(astronauta2, joystick2, last_shot_time2, dt, is_keyboard_player=False)
 
@@ -552,6 +679,82 @@ while game:
     all_sprites.update(dt)
     bullets.update(dt)
     enemy_lasers_group.update(dt)
+
+    # ---------- Enemies shooting (fixo por tipo) ----------
+    now_ms = pygame.time.get_ticks()
+    for enemy in list(enemies_group):
+        if getattr(enemy, "dead", False):
+            continue
+
+        # assegura existência do intervalo e next_shot_time (criado no spawn, mas double check)
+        if not hasattr(enemy, "_next_shot_time") or not hasattr(enemy, "_shot_interval"):
+            if isinstance(enemy, Alien):
+                enemy._shot_interval = ALIEN_SHOOT_INTERVAL_MS
+            elif isinstance(enemy, OVNI):
+                enemy._shot_interval = OVNI_SHOOT_INTERVAL_MS
+            else:
+                enemy._shot_interval = random.randint(1000, 3000)
+            enemy._next_shot_time = now_ms + enemy._shot_interval
+
+        # visibilidade em tela (world -> screen via camera_x)
+        # O código original já calcula 'is_visible' e 'is_near_player' corretamente.
+        # Estamos focados apenas na lógica de 'is_near_player' agora, pois você quer que atire só de perto.
+
+        # proximidade a players (world coords)
+        px1 = player1.rect.centerx
+        py1 = player1.rect.centery
+        px2 = player2.rect.centerx
+        py2 = player2.rect.centery
+        ex = enemy.rect.centerx
+        ey = enemy.rect.centery
+        
+        # MANTIDO: Lógica de proximidade (se um dos jogadores estiver perto)
+        d1_sq = (px1 - ex) * (px1 - ex) + (py1 - ey) * (py1 - ey)
+        d2_sq = (px2 - ex) * (px2 - ex) + (py2 - ey) * (py2 - ey)
+        proximity_sq = ENEMY_SHOOT_PROXIMITY * ENEMY_SHOOT_PROXIMITY
+        is_near_player = (d1_sq <= proximity_sq and not getattr(player1, "dead", False)) or \
+                         (d2_sq <= proximity_sq and not getattr(player2, "dead", False))
+
+        # REQUISITO: SÓ ATIRA SE ESTIVER PRÓXIMO
+        if not is_near_player:
+            continue
+
+        # verifica tempo de tiro
+        if now_ms >= enemy._next_shot_time:
+            # comportamento por tipo (DIREÇÕES FIXAS MANTIDAS/REFORÇADAS)
+            if isinstance(enemy, Alien):
+                dir_x, dir_y = -1.0, 0.0   # SEMPRE para a esquerda (REQUISITO)
+                gx = enemy.rect.left - 6
+                gy = enemy.rect.centery
+                b_color = ALIEN_BULLET_COLOR
+                b_size = ALIEN_BULLET_SIZE
+                b_shape = 'circle' 		   # grande e circular
+                b_speed = ENEMY_BULLET_SPEED
+            elif isinstance(enemy, OVNI):
+                dir_x, dir_y = 0.0, 1.0 	# SEMPRE para baixo (REQUISITO)
+                gx = enemy.rect.midbottom[0]
+                gy = enemy.rect.midbottom[1] + 8
+                b_color = OVNI_BULLET_COLOR
+                b_size = OVNI_BULLET_SIZE
+                b_shape = 'rect' 		   # laser (retângulo)
+                b_speed = ENEMY_BULLET_SPEED
+            else: # Outro inimigo qualquer
+                dir_x, dir_y = -1.0, 0.0
+                gx, gy = enemy.rect.centerx, enemy.rect.centery
+                b_color = (255,50,50)
+                b_size = 16
+                b_shape = 'circle'
+                b_speed = ENEMY_BULLET_SPEED
+
+            # cria bala inimiga
+            b = Bullet(gx, gy, dir_x, dir_y, speed=b_speed, world_w=bg_width, world_h=bg_height,
+                        color=b_color, size=b_size, shape=b_shape)
+            setattr(b, "owner_type", "enemy")
+            enemy_lasers_group.add(b)
+            all_sprites.add(b)
+
+            # agenda próximo tiro constante por tipo (5s para Alien, 7s para OVNI)
+            enemy._next_shot_time = now_ms + enemy._shot_interval
 
     # colisões lasers inimigos -> jogadores
     if not astronauta.dead:
@@ -613,7 +816,7 @@ while game:
     world_x = mx + int(camera_x)
     pygame.draw.circle(window, (255, 0, 0), (mx, my), 4)
     font = pygame.font.Font(None, 24)
-    txt = f"Screen: ({mx}, {my})  World: ({world_x}, {my})  Cam X: {int(camera_x)}"
+    txt = f"Screen: ({mx}, {my})  World: ({world_x}, {my})  Cam X: {int(camera_x)}"
     surf = font.render(txt, True, (255,255,255))
     window.blit(surf, (10, 10))
 
