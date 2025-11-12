@@ -547,7 +547,7 @@ class Boss1:
         self.patrol_min_x = 50; self.patrol_max_x = screen_w - 50 - self.w
         self._time = 0.0
         self.bob_amplitude = 10.0; self.bob_frequency = 0.6
-        self.max_health = 120; self.health = float(self.max_health)
+        self.max_health = 60; self.health = float(self.max_health)
         self.slime_cooldown = 2.5; self._time_since_last_slime = 0.0
         self.slime_width = int(self.w*0.5); self.slime_height = 36
         self.slime_duration = 10.0; self.slime_dps = 8.0
