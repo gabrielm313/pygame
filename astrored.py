@@ -354,16 +354,58 @@ class SimpleBullet:
         return (dx*dx + dy*dy) <= (self.radius*self.radius)
 
 class PlayerSimple:
-    def __init__(self, x, ground_y, screen_height, image_path=None):
+    """
+    PlayerSimple agora suporta animação de caminhada:
+     - fornecer walk_frames_paths (lista de paths) carregará e usará essa sequência quando o jogador estiver se movendo.
+     - se não houver frames, usa imagem estática (image_path) como antes.
+    """
+    def __init__(self, x, ground_y, screen_height, image_path=None, walk_frames_paths=None, walk_frame_interval=0.10):
         self.ground_y = ground_y
         self.image = None
-        if image_path and os.path.exists(image_path):
-            img = pygame.image.load(image_path).convert_alpha()
-            target_h = int(screen_height * 0.25)
-            scale = target_h / img.get_height()
-            self.image = pygame.transform.rotozoom(img, 0, scale)
-        self.w = self.image.get_width() if self.image else 64
-        self.h = self.image.get_height() if self.image else 128
+        self.walk_frames = []  # lista de superfícies já escaladas
+        self.walk_frame_idx = 0
+        self.walk_frame_time = 0.0
+        self.walk_frame_interval = walk_frame_interval  # segundos por frame
+        self.use_walk = False
+
+        # Carregar frames de caminhada (se fornecidos)
+        if walk_frames_paths:
+            frames = []
+            for p in walk_frames_paths:
+                if os.path.exists(p):
+                    try:
+                        img = pygame.image.load(p).convert_alpha()
+                        frames.append(img)
+                    except Exception:
+                        pass
+            if frames:
+                # escalar frames para uma altura alvo relativa à tela (sem alterar proporção)
+                target_h = int(screen_height * 0.25)
+                scaled = []
+                for img in frames:
+                    scale = target_h / img.get_height()
+                    scaled.append(pygame.transform.rotozoom(img, 0, scale))
+                self.walk_frames = scaled
+                self.use_walk = True
+
+        # se não tiver frames, tentar carregar imagem estática
+        if not self.use_walk and image_path and os.path.exists(image_path):
+            try:
+                img = pygame.image.load(image_path).convert_alpha()
+                target_h = int(screen_height * 0.25)
+                scale = target_h / img.get_height()
+                self.image = pygame.transform.rotozoom(img, 0, scale)
+            except Exception:
+                self.image = None
+
+        # se houver frames, definir largura/altura a partir do primeiro frame
+        if self.use_walk and self.walk_frames:
+            first = self.walk_frames[0]
+            self.w = first.get_width(); self.h = first.get_height()
+        else:
+            self.w = self.image.get_width() if self.image else 64
+            self.h = self.image.get_height() if self.image else 128
+
         self.rect = pygame.Rect(x, ground_y - self.h, self.w, self.h)
         self.vel_x = 0.0; self.vel_y = 0.0
         self.SPEED = 700.0; self.JUMP_VELOCITY = -1500.0; self.GRAVITY = 3000.0
@@ -377,6 +419,7 @@ class PlayerSimple:
         self.max_health = 8; self.health = float(self.max_health)
         self.invuln_time = 0.8; self._invuln_timer=0.0; self.dead=False
         self.aim=(1,0); self.facing_right=True
+
     def handle_input_keyboard(self, keys, left_key, right_key, look_up_key, aim_keys):
         if self.dead: self.vel_x=0; return
         vx=0.0
@@ -394,24 +437,45 @@ class PlayerSimple:
                     ax+=vec[0]; ay+=vec[1]
             if ax!=0 or ay!=0:
                 ax=max(-1,min(1,ax)); ay=max(-1,min(1,ay)); self.aim=(ax,ay)
+
     def try_jump(self):
         if self.dead: return
         if self.grounded:
             self.vel_y = self.JUMP_VELOCITY; self.grounded=False
+
     def update(self, dt, screen_width):
         if self.dead: return
         self._time_since_last_shot += dt
         if self._invuln_timer > 0:
             self._invuln_timer -= dt
             if self._invuln_timer<0: self._invuln_timer=0.0
+
+        # movimento horizontal
         self.rect.x += int(self.vel_x * dt)
         if self.rect.left < 0: self.rect.left=0
         if self.rect.right>screen_width: self.rect.right=screen_width
+
+        # gravidade e salto
         self.vel_y += self.GRAVITY * dt
         self.rect.y += int(self.vel_y * dt)
         if self.rect.bottom >= self.ground_y:
             self.rect.bottom = self.ground_y; self.vel_y=0.0; self.grounded=True
         else: self.grounded=False
+
+        # animação de caminhada (apenas se houver frames)
+        if self.use_walk and self.walk_frames:
+            moving = (abs(self.vel_x) > 5.0) and self.grounded
+            if moving:
+                self.walk_frame_time += dt
+                if self.walk_frame_time >= self.walk_frame_interval:
+                    steps = int(self.walk_frame_time / self.walk_frame_interval)
+                    self.walk_frame_idx = (self.walk_frame_idx + steps) % len(self.walk_frames)
+                    self.walk_frame_time -= steps * self.walk_frame_interval
+            else:
+                # reset para frame parado (0)
+                self.walk_frame_idx = 0
+                self.walk_frame_time = 0.0
+
     def can_shoot(self):
         return (not self.dead) and (self._time_since_last_shot >= self.fire_cooldown)
     def shoot(self, direction):
@@ -432,15 +496,23 @@ class PlayerSimple:
         if self.health <= 0:
             self.dead = True
         return True
+
     def draw(self, surface):
         if self.dead: return
-        if self.image:
+        # desenhar sprite animado (se houver) ou imagem estática
+        if self.use_walk and self.walk_frames:
+            frame = self.walk_frames[self.walk_frame_idx]
+            if not self.facing_right:
+                frame = pygame.transform.flip(frame, True, False)
+            surface.blit(frame, (self.rect.x, self.rect.y))
+        elif self.image:
             frame = self.image
             if not self.facing_right:
                 frame = pygame.transform.flip(frame, True, False)
             surface.blit(frame, (self.rect.x, self.rect.y))
         else:
             pygame.draw.rect(surface, (200,30,30), self.rect)
+        # barra de vida
         bar_w = max(40, self.w); bar_h = 8
         bar_x = self.rect.x; bar_y = self.rect.y - (bar_h+6)
         bg_rect = pygame.Rect(bar_x, bar_y, bar_w, bar_h)
@@ -510,7 +582,15 @@ def run_boss1(screen, clock, W, H):
     if os.path.exists(fundo_path):
         fundo_image = pygame.image.load(fundo_path).convert()
         fundo_image = pygame.transform.smoothscale(fundo_image, (W,H))
-    player1 = PlayerSimple(W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'))
+
+    # PREPARAR lista de frames de caminhada para o Player 1
+    walk_frames_p1 = []
+    for i in range(4):
+        fp = os.path.join('assets','img', f'andar_{i}.png')
+        walk_frames_p1.append(fp)
+
+    player1 = PlayerSimple(W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'),
+                           walk_frames_paths=walk_frames_p1, walk_frame_interval=0.10)
     player2 = PlayerSimple(3*W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'))
     boss = Boss1(W//2 - 200, 60, W, H, image_path=os.path.join('assets','img','boss2.png'))
     bullets = []
@@ -747,7 +827,14 @@ def run_boss2(screen, clock, W, H):
         pygame.mixer.music.set_volume(0.18)
         pygame.mixer.music.play(-1)
 
-    player1 = PlayerSimple(W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'))
+    # opcional: usar animação de andar para player1 aqui também (mantive apenas para P1 conforme pedido)
+    walk_frames_p1 = []
+    for i in range(4):
+        fp = os.path.join('assets','img', f'andar_{i}.png')
+        walk_frames_p1.append(fp)
+
+    player1 = PlayerSimple(W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'),
+                           walk_frames_paths=walk_frames_p1, walk_frame_interval=0.10)
     player2 = PlayerSimple(3*W//4, H, H, image_path=os.path.join('assets','img','astronauta1.png'))
     boss = Boss2(W//4, 80, W, H, image_path=os.path.join('assets','img','nave boss.png'),
                  bullet_image_path=os.path.join('assets','img','bala.png'))
