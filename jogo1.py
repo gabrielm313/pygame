@@ -1,4 +1,4 @@
-# jogo.py
+# jogo.py  (arquivo completo — substitua o seu)
 import pygame
 import math
 from os import path
@@ -9,17 +9,18 @@ from assets import load_assets
 import sprites
 from pygame import K_LEFT, K_RIGHT, K_UP, K_DOWN
 
+# inicialização (sem try/except)
 pygame.init()
-pygame.mixer.init()  # sem try/except conforme pedido
+pygame.mixer.init()
 
-# constantes e paths
+# --- Config / paths / cores ---
 BUTTON_BG = (120, 40, 40)
 BUTTON_HOVER_BG = (70, 70, 120)
 BUTTON_BORDER = (255, 255, 255)
 BUTTON_TEXT = (245, 245, 245)
-
 MENU_BG_PATH = path.join('assets', 'img', 'inicio.png')
-TUTORIAL_PATHS = [path.join('assets', 'img', 'tutorial1.png'), path.join('assets', 'img', 'tutorial2.png')]
+TUTORIAL_PATHS = [path.join('assets', 'img', 'tutorial1.png'),
+                  path.join('assets', 'img', 'tutorial2.png')]
 MENU_MUSIC_PATH = path.join('assets', 'sounds', 'som9.mp3')
 GAME_MUSIC_PATH = path.join('assets', 'sounds', 'som5.mp3')
 
@@ -36,18 +37,23 @@ if pygame.joystick.get_count() > 1:
 
 clock = pygame.time.Clock()
 
+# tela (em fullscreen)
 info = pygame.display.Info()
 LARGURA, ALTURA = info.current_w, info.current_h
 window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 pygame.display.set_caption('Joguinho')
 
+# carrega assets
 assets = load_assets()
+
+# background (orig_bg)
 bg_path = path.join('assets', 'img', 'fundo_pg.png')
-if not os.path.exists(bg_path):
+if os.path.exists(bg_path):
+    orig_bg = pygame.image.load(bg_path).convert_alpha()
+else:
+    # fallback: superfície preta
     orig_bg = pygame.Surface((1920, 1080)).convert_alpha()
     orig_bg.fill((0, 0, 0))
-else:
-    orig_bg = pygame.image.load(bg_path).convert_alpha()
 
 def make_bg_for_height(target_height):
     orig_w, orig_h = orig_bg.get_width(), orig_bg.get_height()
@@ -58,8 +64,7 @@ def make_bg_for_height(target_height):
 bg_image = make_bg_for_height(ALTURA)
 bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
 
-TAMANHO_DO_AZULEJO = bg_height
-
+# util: carregar e escalar (usado pelo menu)
 def load_and_scale(img_path, W, H, keep_aspect=True):
     if not os.path.exists(img_path):
         return None
@@ -70,6 +75,7 @@ def load_and_scale(img_path, W, H, keep_aspect=True):
         return pygame.transform.smoothscale(img, (int(iw*scale), int(ih*scale)))
     return pygame.transform.smoothscale(img, (W, H))
 
+# botão do menu
 def draw_button(surface, rect, text, font, hovered=False,
                 bg_color=BUTTON_BG, hover_bg=BUTTON_HOVER_BG,
                 border_color=BUTTON_BORDER, text_color=BUTTON_TEXT):
@@ -81,6 +87,7 @@ def draw_button(surface, rect, text, font, hovered=False,
     ty = rect.y + (rect.h - txt.get_height()) // 2
     surface.blit(txt, (tx, ty))
 
+# mostra tutorial (controlável)
 def show_tutorial_interactive(screen, clock, W, H, image_paths):
     imgs = [load_and_scale(p, int(W*0.8), int(H*0.75)) for p in image_paths]
     index = 0
@@ -134,6 +141,7 @@ def show_tutorial_interactive(screen, clock, W, H, image_paths):
         screen.blit(page_text, ((W-page_text.get_width())//2, int(H*0.9)))
         pygame.display.flip()
 
+# menu principal
 def menu(screen, clock, W, H):
     bg = load_and_scale(MENU_BG_PATH, W, H, keep_aspect=False)
     title_font = pygame.font.Font(None, 96)
@@ -179,13 +187,17 @@ def menu(screen, clock, W, H):
         draw_button(screen, btn_tutorial, "TUTORIAL", btn_font, hovered=btn_tutorial.collidepoint(mx, my))
         pygame.display.flip()
         clock.tick(60)
-
     pygame.mixer.music.fadeout(500)
     return start_game
 
+# quadrinhos (definida antes da chamada)
 def mostrar_quadrinhos(screen, clock, W, H):
-    quadrinhos = [path.join('assets', 'img', 'quadrinho3.png'), path.join('assets', 'img', 'quadrinho4.png'), path.join('assets', 'img', 'quadrinho5.png')]
-    DURACAO = 15000
+    quadrinhos = [
+        path.join('assets', 'img', 'quadrinho3.png'),
+        path.join('assets', 'img', 'quadrinho4.png'),
+        path.join('assets', 'img', 'quadrinho5.png')
+    ]
+    DURACAO = 15000  # 15s por quadrinho
     BUTTON_A = 0
     imgs = []
     for p in quadrinhos:
@@ -227,7 +239,7 @@ def mostrar_quadrinhos(screen, clock, W, H):
             if pygame.time.get_ticks() - start_time >= DURACAO:
                 running = False
 
-# desenha barra de vida acima da cabeça (usa draw_x/draw_y - posição na tela)
+# desenha barra de vida acima da cabeça, seguindo o `sprite`
 def draw_entity_health_bar(surface, entity, draw_x, draw_y):
     if getattr(entity, "dead", False):
         return
@@ -239,29 +251,26 @@ def draw_entity_health_bar(surface, entity, draw_x, draw_y):
     EMPTY_COLOR = (50, 50, 50)
     HEALTH_COLOR = (0, 255, 0)
     INVULN_COLOR = (255, 255, 0)
-
     health_ratio = max(0.0, min(1.0, float(entity.health) / float(entity.max_health)))
     fill_width = int(BAR_WIDTH * health_ratio)
-
     fill_color = HEALTH_COLOR
     if getattr(entity, "_invuln_timer", 0.0) > 0.0:
         if (pygame.time.get_ticks() // 100) % 2 == 0:
             fill_color = INVULN_COLOR
-
-    # centraliza a barra sobre o sprite (em cima da cabeça)
-    outline_rect = pygame.Rect(int(draw_x + entity.rect.width//2 - BAR_WIDTH//2), int(draw_y - 12), BAR_WIDTH, BAR_HEIGHT)
+    outline_rect = pygame.Rect(int(draw_x + entity.rect.width//2 - BAR_WIDTH//2), int(draw_y - 14), BAR_WIDTH, BAR_HEIGHT)
     pygame.draw.rect(surface, EMPTY_COLOR, outline_rect)
     fill_rect = pygame.Rect(outline_rect.x, outline_rect.y, fill_width, BAR_HEIGHT)
     pygame.draw.rect(surface, fill_color, fill_rect)
     pygame.draw.rect(surface, BORDER_COLOR, outline_rect, 1)
 
-# inicia jogo
+# ------------------ Inicia jogo (chamadas após definições) ------------------
 entrar_menu = menu(window, clock, LARGURA, ALTURA)
 if not entrar_menu:
     pygame.quit(); sys.exit(0)
 
 mostrar_quadrinhos(window, clock, LARGURA, ALTURA)
 
+# toca musica do jogo (sem try/except)
 if os.path.exists(GAME_MUSIC_PATH):
     if pygame.mixer.music.get_busy():
         pygame.mixer.music.stop()
@@ -269,22 +278,24 @@ if os.path.exists(GAME_MUSIC_PATH):
     pygame.mixer.music.set_volume(0.20)
     pygame.mixer.music.play(-1)
 
-# plataformas (coordenadas do mundo)
+# plataformas
 platform_rects = [
     pygame.Rect(390,353, 1760 , 4),
     pygame.Rect(2322, 520, 1220, 4),
     pygame.Rect(3750, 360, 1300, 4),
     pygame.Rect(7640, 360, 1760, 4),
     pygame.Rect(11590, 360, 1450, 4),
-    pygame.Rect(13250, 530, 910, 4)
+    pygame.Rect(13200, 530, 910, 4)
 ]
 
+# aliases para classes
 Astronauta = sprites.Astronauta
 Bullet = sprites.Bullet
 Alien = sprites.Alien
 OVNI = sprites.OVNI
 EnemyLaser = sprites.EnemyLaser
 
+# grupos
 all_sprites = pygame.sprite.Group()
 bullets = pygame.sprite.Group()
 platforms = pygame.sprite.Group()
@@ -297,7 +308,7 @@ all_sprites.add(astronauta)
 astronauta2 = Astronauta(all_sprites, assets, row=0, column=0, platforms=platform_rects)
 all_sprites.add(astronauta2)
 
-# dicionário para passar aos inimigos (inclui assets)
+# dicionário de grupos para passar aos inimigos
 all_groups = {
     'all_sprites': all_sprites,
     'enemies': enemies_group,
@@ -329,12 +340,11 @@ ENEMY_SPAWN_DATA = [
     ('alien', 1000, 360, 1300, 1300),
     ('alien', 3417, 491, 3000, 4000),   
     ('alien', 4480, 360, 4000, 4000),   
-    ('alien', 5300, 890, 5000, 5000),   
+    #('alien', 5300, 890, 5000, 5000),   
     ('alien', 6300, 860, 6000, 7000),
     ('alien', 7350, 360, 7000, 8000),
     ('alien', 8580, 370, 3000, 3000),
-    ('alien', 10700, 530, 3000, 3000),
-    ('alien', 11200, 920, 3000, 3000),
+    ('alien', 11200, 980, 3000, 3000),
     ('alien', 13650, 550, 3000, 3000),
 
 
@@ -349,11 +359,7 @@ ENEMY_SPAWN_DATA = [
     ('ovni', 11740, 150, 11300, 12000),
     ('ovni', 12300, 150, 12000, 12600),
     ('ovni', 12900, 150, 12600, 13250),
-    ('ovni', 13700, 215, 13200, 14200),
-
-
-    
-    
+    ('ovni', 13700, 215, 13200, 14200),    
 ]
 
 player1 = astronauta
@@ -370,20 +376,21 @@ for data in ENEMY_SPAWN_DATA:
         all_sprites.add(enemy)
         enemies_group.add(enemy)
 
-# posicionamento inicial dos jogadores
+# posiciona jogadores no começo
 astronauta.rect.centerx = LARGURA // 2 - 50
 astronauta.rect.bottom = ALTURA - 40
 astronauta2.rect.centerx = LARGURA // 2 + 50
 astronauta2.rect.bottom = ALTURA - 40
 
-# câmera
+# camera
 camera_x = 0
 camera_speed_smooth = 0.5
 left_deadzone = LARGURA // 3
 right_deadzone = (LARGURA * 2) // 3
 max_camera_x = max(0, bg_width - LARGURA)
 
-SHOT_COOLDOWN_MS = 150
+# tiros / cooldowns
+SHOT_COOLDOWN_MS = 250
 last_shot_time1 = 0
 last_shot_time2 = 0
 
@@ -417,7 +424,6 @@ def get_stick_input(joystick, axis_x, axis_y, deadzone=JOY_DEADZONE):
 def get_shot_direction_from_arrows(joystick):
     keys = pygame.key.get_pressed()
     dx = 0; dy = 0
-    # teclado para jogador 1 (seta direita/esquerda/up/down = direção do tiro)
     if joystick == joystick1:
         if keys[K_RIGHT]: dx += 1
         if keys[K_LEFT]: dx -= 1
@@ -429,8 +435,7 @@ def get_shot_direction_from_arrows(joystick):
         dir_x, dir_y = get_stick_input(joystick, AXIS_RIGHT_X, AXIS_RIGHT_Y)
         if dir_x != 0 or dir_y != 0:
             return dir_x, dir_y
-    # padrão para frente
-    return 1, 0
+    return 0, 0
 
 def reconfigure_display(fullscreen):
     global window, LARGURA, ALTURA, left_deadzone, right_deadzone
@@ -445,7 +450,7 @@ def reconfigure_display(fullscreen):
     bg_width, bg_height = bg_image.get_width(), bg_image.get_height()
     max_camera_x = max(0, bg_width - LARGURA)
 
-def process_player_input(astronauta, joystick, last_shot_time, dt, is_keyboard_player=False, shoot_pressed=False):
+def process_player_input(astronauta, joystick, last_shot_time, dt, is_keyboard_player=False):
     is_rt_pulled = False
     joystick_x_dir = 0
     joystick_y_dir = 0
@@ -454,61 +459,42 @@ def process_player_input(astronauta, joystick, last_shot_time, dt, is_keyboard_p
         rt_value = joystick.get_axis(AXIS_RT) if joystick.get_numaxes() > AXIS_RT else 0
         if rt_value > 0.5:
             is_rt_pulled = True
-
     keys = pygame.key.get_pressed()
-
     if is_keyboard_player:
-        # movimento por teclado (player 1)
         if keys[K_LEFT]:
             astronauta.speedx = -7
         elif keys[K_RIGHT]:
             astronauta.speedx = 7
         elif joystick_x_dir == 0:
             astronauta.speedx = 0
-
     if joystick_x_dir != 0:
         astronauta.speedx = joystick_x_dir * 7
     elif not is_keyboard_player and joystick_x_dir == 0:
         astronauta.speedx = 0
-
     if joystick_y_dir > 0 and astronauta.on_ground:
         astronauta.drop_through_timer = astronauta.drop_through_duration
         astronauta.on_ground = False
         if astronauta.speedy <= 0:
             astronauta.speedy = 1
-
-    # pulo por teclado para quem tem is_keyboard_player=True (P1)
-    if is_keyboard_player:
-        if keys[K_UP] and astronauta.on_ground:
-            astronauta.pular()
-
     now = pygame.time.get_ticks()
-
-    if is_rt_pulled or shoot_pressed:
+    if is_rt_pulled:
         if now - last_shot_time >= SHOT_COOLDOWN_MS:
             dir_x, dir_y = get_shot_direction_from_arrows(joystick)
             if dir_x != 0 or dir_y != 0:
                 last_shot_time = now
-                if hasattr(astronauta, "get_gun_tip"):
-                    gun_x, gun_y = astronauta.get_gun_tip()
-                else:
-                    gun_x, gun_y = astronauta.rect.centerx + 20, astronauta.rect.centery
+                gun_x, gun_y = astronauta.get_gun_tip()
                 b = Bullet(gun_x, gun_y, dir_x, dir_y, speed=900, world_w=bg_width, world_h=bg_height)
                 bullets.add(b)
                 all_sprites.add(b)
-
     return last_shot_time
 
-# main loop
+# -------------------- Loop principal --------------------
 game = True
 while game:
     dt_ms = clock.tick(FPS)
     dt = dt_ms / 1000.0
     now = pygame.time.get_ticks()
-
-    # flags de tiro por teclado
     j1_shot_by_keyboard = False
-    j2_shot_by_keyboard = False
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -516,11 +502,9 @@ while game:
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 game = False
-            # pular P1: W / UP / SPACE
             if event.key in (pygame.K_w, pygame.K_UP, pygame.K_SPACE):
                 if not astronauta.dead:
                     astronauta.pular()
-            # pular P2: I
             if event.key == pygame.K_i:
                 if not astronauta2.dead:
                     astronauta2.pular()
@@ -528,14 +512,9 @@ while game:
                 astronauta.speedx = -7
             if event.key == pygame.K_RIGHT:
                 astronauta.speedx = 7
-            # tiro P1 por teclado: X
             if event.key == pygame.K_x:
                 if now - last_shot_time1 >= SHOT_COOLDOWN_MS:
                     j1_shot_by_keyboard = True
-            # tiro P2 por teclado: O
-            if event.key == pygame.K_o:
-                if now - last_shot_time2 >= SHOT_COOLDOWN_MS:
-                    j2_shot_by_keyboard = True
             if event.key == pygame.K_DOWN:
                 if astronauta.on_ground:
                     astronauta.drop_through_timer = astronauta.drop_through_duration
@@ -547,7 +526,6 @@ while game:
                 if joystick1 is None or get_stick_input(joystick1, AXIS_LEFT_X, AXIS_LEFT_Y)[0] == 0:
                     astronauta.speedx = 0
         if event.type == pygame.JOYBUTTONDOWN:
-            # botão A -> pular
             if event.button == BUTTON_A:
                 if event.joy == 0:
                     if not astronauta.dead:
@@ -559,7 +537,7 @@ while game:
             LARGURA, ALTURA = event.w, event.h
             reconfigure_display(fullscreen=False)
 
-    # process inputs / tiros por joystick e teclado flags
+    # process inputs
     j1_rt_pulled = False
     if joystick1 is not None and joystick1.get_numaxes() > AXIS_RT:
         if joystick1.get_axis(AXIS_RT) > 0.5:
@@ -567,22 +545,15 @@ while game:
     if j1_shot_by_keyboard:
         j1_rt_pulled = True
 
-    last_shot_time1 = process_player_input(astronauta, joystick1, last_shot_time1, dt, is_keyboard_player=True, shoot_pressed=j1_shot_by_keyboard)
-
-    j2_rt_pulled = False
-    if joystick2 is not None and joystick2.get_numaxes() > AXIS_RT:
-        if joystick2.get_axis(AXIS_RT) > 0.5:
-            j2_rt_pulled = True
-    if j2_shot_by_keyboard:
-        j2_rt_pulled = True
-
-    last_shot_time2 = process_player_input(astronauta2, joystick2, last_shot_time2, dt, is_keyboard_player=False, shoot_pressed=j2_shot_by_keyboard)
+    last_shot_time1 = process_player_input(astronauta, joystick1, last_shot_time1, dt, is_keyboard_player=True)
+    last_shot_time2 = process_player_input(astronauta2, joystick2, last_shot_time2, dt, is_keyboard_player=False)
 
     # atualiza sprites
     all_sprites.update(dt)
     bullets.update(dt)
+    enemy_lasers_group.update(dt)
 
-    # colisão: lasers inimigos -> jogadores
+    # colisões lasers inimigos -> jogadores
     if not astronauta.dead:
         hits1 = pygame.sprite.spritecollide(astronauta, enemy_lasers_group, True)
         for hit in hits1:
@@ -592,14 +563,14 @@ while game:
         for hit in hits2:
             astronauta2.take_damage(1)
 
-    # colisão: balas jogador -> inimigos (cada bala causa 1 de dano)
+    # colisões balas jogador -> inimigos
     collisions = pygame.sprite.groupcollide(enemies_group, bullets, False, True)
     for enemy, bullet_list in collisions.items():
         for _ in bullet_list:
             if hasattr(enemy, "take_damage"):
                 enemy.take_damage(1)
 
-    # lógica câmera (focar jogador 1)
+    # camera
     player_screen_x = astronauta.rect.centerx - camera_x
     if player_screen_x > right_deadzone:
         target_camera_x = astronauta.rect.centerx - right_deadzone
@@ -623,26 +594,24 @@ while game:
         if astronauta2.speedx < 0:
             astronauta2.speedx = 0
 
+    # desenha
     window.fill((0, 0, 0))
     window.blit(bg_image, (-int(camera_x), 0))
 
-    # desenha sprites (com offset da camera)
     for sprite in all_sprites:
         draw_x = sprite.rect.x - int(camera_x)
         draw_y = sprite.rect.y
-        # se astronauta invulnerável, pisca (não desenha)
+        # piscar quando invulnerável
         if isinstance(sprite, sprites.Astronauta) and getattr(sprite, "_invuln_timer", 0.0) > 0.0:
             if (pygame.time.get_ticks() // 100) % 2 == 0:
                 continue
         window.blit(sprite.image, (draw_x, draw_y))
-        # desenha barra de vida acima da cabeça (para todos os sprites que a possuem)
         draw_entity_health_bar(window, sprite, draw_x, draw_y)
 
-    # debug: círculo do mouse e info
+    # debug mouse
     mx, my = pygame.mouse.get_pos()
     world_x = mx + int(camera_x)
     pygame.draw.circle(window, (255, 0, 0), (mx, my), 4)
-
     font = pygame.font.Font(None, 24)
     txt = f"Screen: ({mx}, {my})  World: ({world_x}, {my})  Cam X: {int(camera_x)}"
     surf = font.render(txt, True, (255,255,255))
