@@ -11,3 +11,6 @@ A inspiração do jogo foi o jogo Sunset Riders, mas sem utilizar nenhum código
 O arquivo utiliza apenas a biblioteca Pygame.
 O código é separado em 10 arquivos e rodado na pasta main.py, cada arquivo roda uma parte do jogo e carrega elementos como personagens, fases de boss, etc. Além disso, é utilizado a pasta assets com todos arquivos de imagens, sons e fontes do jogo. E existe um arquivo chamado astrored, que é o arquivo do jogo compactado, com todas funções e classes em um só arquivo, e foi utilizado como base para fazer a separação de arquivos.
 Com auxilio de inteligências artificiais generativas como chatgpt, gemini e cloude, foi possível o desenvolvimento e criação de funções e classes.
+
+Link de demonstração do jogo:
+https://youtu.be/kl6YurRsUOk
