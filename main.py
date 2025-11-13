@@ -1,4 +1,13 @@
 # main.py
+# Arquivo principal que inicia o jogo, cria a janela/área de desenho e controla o fluxo:
+# - mostra o menu
+# - obtém nomes dos jogadores
+# - executa a campanha
+# - salva/mostra ranking
+#
+# Este arquivo importa as funções de interface (menu, campaign, ranking, utils) e
+# contém helpers para inicializar o pygame de forma tolerante a falhas.
+
 import sys
 import pygame
 
@@ -9,7 +18,22 @@ from ranking import save_ranking_entry, show_ranking_screen
 
 
 def safe_init_pygame():
-    """Inicializa pygame/mixer/joystick com tolerância a falhas."""
+    """
+    Inicializa pygame, o mixer de áudio e o sistema de joysticks com tolerância a falhas.
+
+    O que faz:
+        - Chama pygame.init() para inicializar os subsistemas básicos do Pygame.
+        - Tenta inicializar pygame.mixer; se falhar (por exemplo, sem dispositivo de áudio),
+          ignora o erro e continua — isso evita que a aplicação quebre em ambientes sem som.
+        - Tenta inicializar pygame.joystick; se falhar, ignora o erro.
+        - Percorre joysticks detectados e chama init() em cada um, ignorando exceções.
+
+    Recebe:
+        - Nada.
+
+    Retorna:
+        - None. (Efeitos colaterais: subsistemas do pygame inicializados quando possível.)
+    """
     pygame.init()
     try:
         pygame.mixer.init()
@@ -31,8 +55,21 @@ def safe_init_pygame():
 
 def create_screen():
     """
-    Tenta fullscreen nativo; se falhar (ex: execução em ambiente sem suporte),
-    cai para janela 1280x720.
+    Cria a superfície de exibição (screen).
+
+    O que faz:
+        - Tenta ativar o modo fullscreen nativo usando as resoluções atuais do display.
+        - Se a tentativa de fullscreen falhar (por exemplo, em ambientes sem suporte),
+          faz fallback para uma janela de 1280x720.
+
+    Recebe:
+        - Nada.
+
+    Retorna:
+        - Tupla (screen, W, H)
+            - screen: pygame.Surface retornada por pygame.display.set_mode(...)
+            - W: largura escolhida (int)
+            - H: altura escolhida (int)
     """
     try:
         info = pygame.display.Info()
@@ -47,6 +84,33 @@ def create_screen():
 
 
 def main():
+    """
+    Função principal do programa — organiza o loop principal de navegação entre menu,
+    obtenção de nomes, execução da campanha e exibição/salvamento do ranking.
+
+    O que faz (detalhado):
+        - Inicializa Pygame de forma tolerante via safe_init_pygame().
+        - Cria a tela (screen) e o clock.
+        - Entra num loop principal que:
+            1. Chama menu(screen, clock, W, H). Se o menu lançar uma exceção, encerra o jogo
+               imprimindo o erro no stderr.
+            2. Se o menu retornar falsy (usuário escolheu sair), encerra o programa.
+            3. Pede nomes dos jogadores com get_player_names(...). Se o jogador cancelar (None),
+               volta ao menu.
+            4. Executa campaign(...). Em caso de exceção durante a campanha, mostra o ranking
+               e volta ao menu.
+            5. Se a campanha foi completada e há um vencedor válido (1 ou 2), salva o ranking
+               com save_ranking_entry(nome_do_vencedor, tempo) (com tratamento de exceções).
+            6. Exibe uma tela de parabéns com o tempo do vencedor (até qualquer tecla/clique),
+               depois mostra a tela de ranking.
+            7. Se a campanha foi abortada/empatada/sem vencedor, mostra o ranking mesmo assim.
+
+    Recebe:
+        - Nada.
+
+    Retorna:
+        - None (a função termina apenas quando o usuário sai do programa ou ocorre sys.exit).
+    """
     safe_init_pygame()
     screen, W, H = create_screen()
     pygame.display.set_caption('Joguinho Integrado')
@@ -114,6 +178,7 @@ def main():
                     pygame.display.flip()
                     clock.tick(30)
             except Exception:
+                # falhas aqui não devem quebrar o fluxo principal
                 pass
 
             # mostrar ranking
